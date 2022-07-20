@@ -1,0 +1,13 @@
+name: Conso_electrique
+title: Conso_electrique
+username:
+account: brubru-studio
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6665285
+bundleId: 6113586
+url: https://brubru-studio.shinyapps.io/Conso_electrique/
+when: 1658270220.66705
+lastSyncTime: 1658270220.66707
+asMultiple: FALSE
+asStatic: FALSE
