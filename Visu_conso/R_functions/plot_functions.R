@@ -1,7 +1,3 @@
-library(ggplot2)
-library(plotly)
-library(RcppRoll)
-library(ggExtra)
 
 # affichage d'une heatmap par jour affichée de manière verticale
 long_heatmap <- function(df_enedis_long){

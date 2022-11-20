@@ -1,5 +1,3 @@
-library(tidyverse)
-library(lubridate)
 
 # mise en forme des données Enedis
 get_df_from_enedis <- function(enedis_path, cap = 12000){

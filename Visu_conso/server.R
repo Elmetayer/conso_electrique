@@ -1,5 +1,13 @@
 
 library(shinydashboard)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(RcppRoll)
+library(ggExtra)
+library(httr)
+library(jsonlite)
 source("R_functions/df_functions.R")
 source("R_functions/plot_functions.R")
 
