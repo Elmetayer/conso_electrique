@@ -10,7 +10,7 @@ get_df_from_enedis <- function(enedis_path, cap = 12000){
       heure = hour(timestamp)) %>% 
     na.omit() %>% 
     group_by(annee, mois, jour, heure) %>%
-    summarise(P_moy_cap = min(cap, mean(Valeur))) %>% 
+    summarise(valeur = min(cap, mean(Valeur))) %>% 
     ungroup()
   return(df_enedis)
 }
@@ -24,7 +24,7 @@ get_df_long_from_enedis <- function(enedis_path, cap = 12000){
       heure = hour(timestamp)) %>% 
     na.omit() %>% 
     group_by(jour_format, heure) %>%
-    summarise(P_moy_cap = min(cap, mean(Valeur))) %>% 
+    summarise(valeur = min(cap, mean(Valeur))) %>% 
     ungroup()
   return(df_enedis_long)
 }

@@ -8,8 +8,10 @@ library(RcppRoll)
 library(ggExtra)
 library(httr)
 library(jsonlite)
+
 source("R_functions/df_functions.R")
 source("R_functions/plot_functions.R")
+source("R_functions/enedis.R")
 
 server <- function(input, output) {
   
@@ -33,7 +35,7 @@ server <- function(input, output) {
     )
   })
   
-  plot_enedis <- reactive({
+  plot_data_enedis <- reactive({
     status <- "ko"
     plot_enedis <- NULL
     plot_enedis <- tryCatch({
@@ -54,15 +56,71 @@ server <- function(input, output) {
     )
   })
   
-  output$plot_enedis <- renderPlot({
-    if(is.null(plot_enedis()$plot_enedis)) {
+  output$plot_data_enedis <- renderPlot({
+    if(is.null(plot_data_enedis()$plot_enedis)) {
       empty_plot(message = "données manquantes")
     } else {
-      plot_enedis()$plot_enedis
+      plot_data_enedis()$plot_enedis
     }
   })
   
-  output$download_plot_enedis <- downloadHandler(
+  api_enedis <- eventReactive(input$call_api_enedis,{
+    status <- "ko"
+    df_enedis <- NULL
+    df_enedis <- tryCatch({
+      status <- "ok"
+      get_API_df_from_enedis(
+        end_date = ymd(req(input$api_end_date), tz = "CET"),
+        cap = req(input$cap_enedis),
+        usage_point_id = req(input$usage_point_id), 
+        api_enedis_token = req(input$api_enedis_token))
+    },
+    error = function(e){
+      status <- "ko"
+      NULL},
+    silent = TRUE) 
+    return(
+      list(
+        status = status,
+        df_enedis = df_enedis
+      )
+    )
+  })
+  
+  plot_api_enedis <- reactive({
+    status <- "ko"
+    plot_enedis <- NULL
+    plot_enedis <- tryCatch({
+      status <- "ok"
+      print(df_enedis)
+      long_heatmap(api_enedis()$df_enedis)
+    },
+    error = function(e){
+      status <- "ko"
+      NULL},
+    silent = TRUE)
+    return(
+      list(
+        status = status,
+        plot_enedis = plot_enedis
+      )
+    )
+  })
+  
+  output$plot_api_enedis <- renderPlot({
+    if(is.null(plot_api_enedis()$plot_enedis)) {
+      empty_plot(message = "données manquantes")
+    } else {
+      if(is.null(plot_api_enedis()$status == "ok")) {
+        empty_plot(message = "données à afficher")
+        # plot_api_enedis()$plot_enedis %>% ggplotly()
+      } else {
+        empty_plot(message = "erreur de données")
+      }
+    }
+  })
+  
+  output$download_plot_data_enedis <- downloadHandler(
     filename = function() {
       switch(
         req(input$type_plot_enedis),

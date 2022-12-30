@@ -4,7 +4,7 @@ long_heatmap <- function(df_enedis_long){
   ggplot() +
     geom_tile(
       data = df_enedis_long,
-      aes(x = heure , y = jour_format , fill = P_moy_cap),
+      aes(x = heure , y = jour_format , fill = valeur),
       color = "white",
       size = 0.1
     ) +
@@ -29,7 +29,7 @@ month_heatmap <- function(df_enedis){
   ggplot() +
     geom_tile(
       data = df_enedis,
-      aes(x = jour , y = heure , fill = P_moy_cap),
+      aes(x = jour , y = heure , fill = valeur),
       color = "white",
       size = 0.1
     ) +
