@@ -12,7 +12,8 @@ Visualisez la consommation de votre compteur Linky sous forme de heatmaps (jour 
 
 ```
 web/      Site statique (Vite + Observable Plot) → GitHub Pages
-proxy/    Cloudflare Worker : relais CORS vers conso.boris.sh (aucun stockage)
+proxy/    Cloudflare Worker : relais CORS (bloqué par conso.boris.sh, voir docs)
+server/   Relais Python (Railway) : alternative au Worker, avec cache et limite par IP
 python/   CLI `optiwatt` : récupération longue durée → CSV, indicateurs
 legacy/   Ancienne application R Shiny (référence)
 ```

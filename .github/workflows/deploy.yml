@@ -34,6 +34,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e "python[dev]" && pytest python
+      - run: python -m pytest server
 
   build:
     needs: test
