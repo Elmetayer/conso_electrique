@@ -111,7 +111,7 @@ const apiPanel = makePanel(document.getElementById('panel-api'), {
   apiForm.token.value = saved.token ?? '';
   apiForm.remember.checked = Boolean(saved.prm);
   apiForm.cap.value = String(saved.cap ?? 6000);
-  apiForm.proxy.value = saved.proxy ?? ENV_PROXY;
+  apiForm.proxy.value = saved.proxy || ENV_PROXY;
   apiForm.end.value = new Date().toLocaleDateString('sv-SE'); // AAAA-MM-JJ en heure locale
   apiForm.end.max = apiForm.end.value;
   apiForm.days.addEventListener('input', () => (apiForm.daysOut.value = apiForm.days.value));
