@@ -60,3 +60,9 @@ def test_cli_summary(tmp_path, capsys):
     f.write_text(CSV, encoding="utf-8")
     assert main(["summary", str(f)]) == 0
     assert "13000 W" in capsys.readouterr().out
+
+
+def test_aggregate_pas_30_min():
+    from optiwatt.data import aggregate
+    rows = aggregate(parse_enedis_csv(CSV), step=30)
+    assert [(r["hour"], r["minute"], r["value"]) for r in rows] == [(0, 0, 400), (0, 30, 600), (1, 0, 13000), (1, 30, 1000)]

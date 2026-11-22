@@ -38,10 +38,16 @@
         <label>Puissance souscrite (plafond)
           <select name="cap" data-cap></select>
         </label>
-        <label>Agrégation horaire
+        <label>Agrégation par case
           <select name="agg">
-            <option value="max" selected>Maximum de l'heure</option>
-            <option value="mean">Moyenne de l'heure</option>
+            <option value="max" selected>Maximum du créneau</option>
+            <option value="mean">Moyenne du créneau</option>
+          </select>
+        </label>
+        <label>Pas de temps
+          <select name="step">
+            <option value="60" selected>1 heure</option>
+            <option value="30">30 minutes (le plus fin)</option>
           </select>
         </label>
         <label>Nombre de jours : <output name="daysOut">7</output>
@@ -92,10 +98,16 @@
         <label>Plafond
           <select name="cap" data-cap></select>
         </label>
-        <label>Agrégation horaire
+        <label>Agrégation par case
           <select name="agg">
-            <option value="mean" selected>Moyenne de l'heure</option>
-            <option value="max">Maximum de l'heure</option>
+            <option value="mean" selected>Moyenne du créneau</option>
+            <option value="max">Maximum du créneau</option>
+          </select>
+        </label>
+        <label>Pas de temps
+          <select name="step">
+            <option value="60" selected>1 heure</option>
+            <option value="30">30 minutes (le plus fin)</option>
           </select>
         </label>
         <div class="actions">

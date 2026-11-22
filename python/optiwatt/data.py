@@ -72,18 +72,24 @@ def parse_api_response(payload: dict) -> list[Point]:
     return sorted(points, key=lambda p: p.t)
 
 
-def aggregate_hourly(points: list[Point], agg: str = "mean", cap: float | None = None) -> list[dict]:
-    """Agrège par (jour, heure). agg = 'mean' ou 'max' ; cap = plafond en W."""
+def aggregate(points: list[Point], agg: str = "mean", cap: float | None = None, step: int = 60) -> list[dict]:
+    """Agrège par (jour, créneau de `step` minutes : 30 ou 60). agg = 'mean' ou 'max' ; cap = plafond en W."""
     groups: dict[tuple[str, int], list[float]] = defaultdict(list)
     for p in points:
         s = p.t - timedelta(minutes=1)
-        groups[(s.date().isoformat(), s.hour)].append(p.v)
+        groups[(s.date().isoformat(), (s.hour * 60 + s.minute) // step)].append(p.v)
     rows = []
-    for (date, hour), values in sorted(groups.items()):
+    for (date, slot), values in sorted(groups.items()):
         raw = max(values) if agg == "max" else sum(values) / len(values)
         capped = bool(cap) and raw > cap
-        rows.append({"date": date, "hour": hour, "raw": raw, "value": cap if capped else raw, "capped": capped})
+        rows.append({"date": date, "slot": slot, "hour": slot * step // 60, "minute": slot * step % 60,
+                     "raw": raw, "value": cap if capped else raw, "capped": capped})
     return rows
+
+
+def aggregate_hourly(points: list[Point], agg: str = "mean", cap: float | None = None) -> list[dict]:
+    """Agrégation par heure (compatibilité)."""
+    return [{k: r[k] for k in ("date", "hour", "raw", "value", "capped")} for r in aggregate(points, agg, cap, 60)]
 
 
 def summarize(points: list[Point]) -> dict:
