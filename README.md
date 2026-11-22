@@ -11,28 +11,45 @@ Visualisez la consommation de votre compteur Linky sous forme de heatmaps (jour 
 ## Architecture
 
 ```
-web/      Site statique (Vite + Observable Plot) → GitHub Pages
-proxy/    Cloudflare Worker : relais CORS (bloqué par conso.boris.sh, voir docs)
-server/   Relais Python (Railway) : alternative au Worker, avec cache et limite par IP
-python/   CLI `optiwatt` : récupération longue durée → CSV, indicateurs
-legacy/   Ancienne application R Shiny (référence)
+Navigateur ──► GitHub Pages (web/, site statique)
+     │
+     └─ onglet API ──► Relais Python sur Railway (server/) ──► conso.boris.sh ──► Enedis
 ```
 
-GitHub Pages ne sert que des fichiers statiques et conso.boris.sh n'envoie pas d'en-têtes CORS : le navigateur passe donc par le petit proxy `proxy/`. L'import CSV, lui, fonctionne sans proxy, entièrement en local.
+| Dossier | Rôle |
+|---|---|
+| `web/` | Site statique (Vite + [Observable Plot](https://observablehq.com/plot/)), publié sur GitHub Pages |
+| `server/` | Relais Python (bibliothèque standard) hébergé sur Railway |
+| `python/` | CLI `optiwatt` : récupération longue durée → CSV, indicateurs |
+| `legacy/` | Ancienne application R Shiny (référence) |
+
+**Pourquoi un relais ?** conso.boris.sh n'envoie pas d'en-têtes CORS : un navigateur ne peut pas l'appeler depuis github.io. Le relais fait l'appel côté serveur et ajoute ces en-têtes. Un premier essai avec un Cloudflare Worker a été abandonné : conso.boris.sh bloque les IP partagées de Cloudflare. L'IP sortante de Railway, elle, est acceptée.
+
+L'import CSV n'utilise pas le relais : il est traité entièrement dans le navigateur.
+
+## Le relais : cache et limite
+
+Pour ménager le quota Enedis, partagé par tous les utilisateurs de conso.boris.sh, et ne pas faire bloquer son IP :
+
+- **Cache de 12 h par requête.** Une réponse réussie est gardée en mémoire 12 h. La clé est l'empreinte (SHA-256) du type de données, des paramètres (PRM, dates) et du token. Redemander exactement la même chose pendant ce délai ne génère aucun appel à Enedis (en-tête `X-OptiWatt-Cache: HIT`). Les erreurs ne sont pas mises en cache.
+- **10 requêtes par heure et par IP.** Chaque adresse IP cliente peut déclencher au plus 10 appels réels vers conso.boris.sh sur une heure glissante. Les réponses servies par le cache ne sont pas comptées. Au-delà, le relais répond `429` sans contacter conso.boris.sh.
+
+Ces deux valeurs se règlent avec les variables `CACHE_HOURS` et `RATE_LIMIT`. Le détail est dans la [documentation](https://elmetayer.github.io/conso_electrique/docs.html#relais).
 
 ## Démarrage rapide
 
 ```bash
 cd web && npm install && npm run dev        # http://localhost:5173/?demo
 npm test                                     # tests JS (Vitest)
-node --test ../proxy/worker.test.js          # tests du proxy
+cd ../server && python main.py               # relais local sur http://localhost:8787
+python -m pytest                             # tests du relais
 cd ../python && pip install -e ".[dev]" && pytest
 ```
 
 ## Déploiement
 
-1. Proxy : connecter le repo au Worker dans Cloudflare (*Settings → Build*, root directory `proxy`, deploy command `npx wrangler deploy`) → redéployé automatiquement à chaque push. Les origines autorisées se gèrent dans `proxy/wrangler.toml` (`ALLOWED_ORIGINS`).
-2. Variable de dépôt `VITE_PROXY_URL` = URL du worker (*Settings → Secrets and variables → Actions → Variables*).
-3. *Settings → Pages → Source : GitHub Actions*. Chaque push sur `master` teste, construit et publie.
-
-Le détail est dans la [documentation](web/docs.html).
+| Élément | Où | Comment |
+|---|---|---|
+| Site | GitHub Pages | *Settings → Pages → Source : GitHub Actions*. Chaque push sur `master` teste, construit et publie (`.github/workflows/deploy.yml`). |
+| Relais | Railway | Service relié au repo, *Root Directory* = `server`. Redéployé à chaque push touchant `server/`. |
+| Lien entre les deux | GitHub | Variable de dépôt `VITE_PROXY_URL` = URL Railway (*Settings → Secrets and variables → Actions → Variables*). |

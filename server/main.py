@@ -96,6 +96,7 @@ class Handler(BaseHTTPRequestHandler):
                 "Access-Control-Allow-Methods": "GET, OPTIONS",
                 "Access-Control-Allow-Headers": "Authorization, Accept",
                 "Access-Control-Max-Age": "86400",
+                "Access-Control-Expose-Headers": "X-OptiWatt-Cache",
                 "Vary": "Origin",
             }
         return None

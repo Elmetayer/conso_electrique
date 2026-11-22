@@ -26,7 +26,7 @@
         <li><a href="#lecture">Lire les heatmaps</a></li>
         <li><a href="#limites">Limites et bon usage</a></li>
         <li><a href="#confidentialite">Confidentialité</a></li>
-        <li><a href="#proxy">Le proxy CORS</a></li>
+        <li><a href="#relais">Le relais Python</a></li>
         <li><a href="#deploiement">Déployer sa propre instance</a></li>
         <li><a href="#python">Outil Python (CLI)</a></li>
         <li><a href="#dev">Développement</a></li>
@@ -44,7 +44,7 @@
         <li><strong>Par l'API</strong> : la courbe de charge (puissance par pas de 30 min) des 1 à 7 derniers jours, avec votre PRM et votre token ;</li>
         <li><strong>Par import d'un fichier CSV</strong> téléchargé depuis votre espace client Enedis, sans limite de durée.</li>
       </ul>
-      <pre><code>Navigateur (GitHub Pages) ──► Proxy CORS (Cloudflare Worker) ──► conso.boris.sh ──► Enedis
+      <pre><code>Navigateur (GitHub Pages) ──► Relais Python (Railway) ──► conso.boris.sh ──► Enedis
         ▲
         └── import CSV (traité localement, rien n'est envoyé)</code></pre>
 
@@ -66,7 +66,7 @@
         <tr><td>Agrégation horaire</td><td>Chaque case représente une heure, qui regroupe deux mesures de 30 min. <em>Maximum</em> fait ressortir les pics, <em>Moyenne</em> reflète l'énergie consommée.</td></tr>
         <tr><td>Nombre de jours / Jusqu'au</td><td>Période demandée : les N jours qui précèdent la date choisie (exclue). Les données de la veille sont disponibles chaque matin.</td></tr>
         <tr><td>Mémoriser</td><td>Enregistre le PRM et le token dans le stockage local de ce navigateur uniquement.</td></tr>
-        <tr><td>Paramètres avancés</td><td>URL du proxy CORS (voir <a href="#proxy">§ 8</a>). Pré-remplie sur l'instance officielle.</td></tr>
+        <tr><td>Paramètres avancés</td><td>URL du relais (voir <a href="#relais">§ 8</a>). Pré-remplie avec le relais officiel : n'y touchez que si vous utilisez votre propre relais.</td></tr>
       </table>
       <p>Le résultat affiche trois indicateurs (période, énergie consommée, pic de puissance) et la heatmap. Les boutons <strong>PNG</strong>, <strong>SVG</strong> et <strong>Données CSV</strong> permettent d'exporter le graphique ou les mesures brutes, au même format que l'espace client Enedis : le fichier est donc réimportable dans l'onglet « Import ».</p>
 
@@ -95,60 +95,96 @@
 
       <h2 id="limites">6. Limites et bon usage</h2>
       <ul>
-        <li>Quotas Enedis partagés par <em>tous</em> les utilisateurs de Conso API : 5 requêtes/s et 10 000 requêtes/h. Les abus peuvent entraîner un blocage d'IP.</li>
-        <li>Enedis ne met à jour les données qu'<strong>une fois par jour</strong> : une requête quotidienne suffit. OptiWatt garde les résultats en cache le temps de la session et ne rappelle pas l'API pour une même période.</li>
+        <li>Les quotas Enedis (5 requêtes/s, 10 000 requêtes/h) sont partagés par <em>tous</em> les utilisateurs de Conso API. Les abus entraînent un blocage d'IP automatique, potentiellement définitif.</li>
+        <li>Enedis ne met à jour les données qu'<strong>une fois par jour</strong> : une requête quotidienne suffit. OptiWatt évite les appels inutiles à deux niveaux : un cache dans votre navigateur et un cache sur le relais (voir <a href="#relais">§ 8</a>).</li>
         <li>La courbe de charge est limitée à <strong>7 jours par requête</strong>. Pour un historique plus long, utilisez l'import CSV ou l'outil Python, qui découpe automatiquement la période.</li>
         <li>Le plafond « kVA × 1000 » est une approximation : la puissance souscrite est apparente (VA), alors que la courbe de charge mesure une puissance active (W).</li>
       </ul>
 
       <h2 id="confidentialite">7. Confidentialité</h2>
       <ul>
-        <li>Aucun serveur OptiWatt ne stocke vos données : les graphiques sont calculés dans votre navigateur.</li>
-        <li>Les fichiers CSV importés ne quittent pas votre appareil.</li>
-        <li>Lors d'un appel à l'API, le PRM et le token transitent par le proxy jusqu'à conso.boris.sh. Le proxy fourni ne journalise rien. Vous pouvez déployer le vôtre (§ 8).</li>
+        <li>Les graphiques sont calculés dans votre navigateur. Les fichiers CSV importés ne quittent pas votre appareil.</li>
+        <li>Lors d'un appel à l'API, le PRM et le token transitent par le relais jusqu'à conso.boris.sh. Le relais :
+          <ul>
+            <li>n'écrit rien sur disque et ne journalise aucune requête (ni PRM, ni token, ni adresse) ;</li>
+            <li>garde en mémoire vive, pendant 12 h au plus, les réponses réussies, rangées sous une empreinte SHA-256 qui ne permet pas de retrouver le token ;</li>
+            <li>perd tout ce contenu à chaque redémarrage ou redéploiement.</li>
+          </ul>
+        </li>
         <li>Si vous cochez « Mémoriser », le token est conservé en clair dans le stockage local de votre navigateur. Ne l'activez pas sur un appareil partagé.</li>
       </ul>
 
-      <h2 id="proxy">8. Le proxy CORS</h2>
-      <p>Pour des raisons de sécurité, un navigateur n'autorise une page à appeler un autre domaine que si ce domaine l'accepte explicitement (en-têtes CORS). Comme conso.boris.sh n'envoie pas ces en-têtes, une page hébergée sur <code>github.io</code> ne peut pas l'appeler directement.</p>
-      <p>Le dossier <code>proxy/</code> contient un Cloudflare Worker d'une cinquantaine de lignes qui :</p>
-      <ul>
-        <li>n'accepte que les requêtes <code>GET /api/&lt;type&gt;</code> vers les types de données Conso API ;</li>
-        <li>relaie l'en-tête <code>Authorization</code> vers conso.boris.sh, avec un <code>User-Agent</code> identifiant OptiWatt, comme le recommande Conso API ;</li>
-        <li>ajoute les en-têtes CORS pour les seules origines autorisées (<code>ALLOWED_ORIGINS</code>) ;</li>
-        <li>ne stocke et ne journalise aucune donnée.</li>
-      </ul>
-      <pre><code>cd proxy
-npm install -g wrangler        # une seule fois
-wrangler login
-wrangler deploy                # affiche l'URL https://optiwatt-proxy.&lt;compte&gt;.workers.dev</code></pre>
-      <p>L'offre gratuite de Cloudflare Workers (100 000 requêtes/jour) est très largement suffisante.</p>
-      <p class="callout">⚠️ Constaté le 22/11/2026 : conso.boris.sh bloque les requêtes émises depuis Cloudflare Workers (page « Attention Required »), dont les IP sont partagées. Le relais Python ci-dessous est l'alternative en cours de test.</p>
-      <h3>Relais Python sur Railway</h3>
-      <p>Le dossier <code>server/</code> contient un relais équivalent en Python (bibliothèque standard), avec un cache de 12 h par requête et une limite de 10 requêtes par heure et par IP.</p>
+      <h2 id="relais">8. Le relais Python</h2>
+      <h3>Pourquoi un relais ?</h3>
+      <p>Un navigateur n'autorise une page à lire la réponse d'un autre domaine que si ce domaine l'accepte explicitement (en-têtes CORS). conso.boris.sh n'envoie pas ces en-têtes, et une page hébergée sur <code>github.io</code> ne peut donc pas l'appeler directement. Le relais fait l'appel à sa place, côté serveur, et renvoie la réponse avec les bons en-têtes.</p>
+      <p class="callout">Un premier relais hébergé sur Cloudflare Workers a été abandonné en novembre 2026 : conso.boris.sh bloque les adresses IP partagées de Cloudflare (page « Attention Required »). Le relais actuel tourne sur Railway, dont l'IP sortante est acceptée.</p>
+
+      <h3>Ce que fait le relais</h3>
+      <p>Le code se trouve dans <code>server/main.py</code> (bibliothèque standard Python, sans dépendance). Pour chaque requête <code>GET /api/&lt;type&gt;</code> :</p>
       <ol>
-        <li>Sur <a href="https://railway.com">railway.com</a> : <em>New Project → Deploy from GitHub repo</em> → <code>conso_electrique</code>.</li>
-        <li>Dans le service : <em>Settings → Source → Root Directory</em> = <code>server</code>. Le fichier <code>server/railway.json</code> fournit la commande de démarrage et le healthcheck.</li>
-        <li><em>Settings → Networking → Generate Domain</em> : vous obtenez l'URL publique <code>https://….up.railway.app</code>.</li>
-        <li>Utilisez cette URL comme « URL du proxy » (paramètres avancés ou variable <code>VITE_PROXY_URL</code>).</li>
+        <li>Il vérifie que la page appelante fait partie des origines autorisées (<code>ALLOWED_ORIGINS</code>). Sinon, il répond <code>403 Origine non autorisée</code>.</li>
+        <li>Il vérifie que le type de données est connu de Conso API et qu'un en-tête <code>Authorization: Bearer …</code> est présent.</li>
+        <li>Il cherche la réponse dans son <strong>cache</strong>. Si elle y est, il la renvoie aussitôt.</li>
+        <li>Sinon, il vérifie la <strong>limite par IP</strong>, puis appelle conso.boris.sh avec un <code>User-Agent</code> qui identifie OptiWatt, comme le demande le service.</li>
+        <li>Il renvoie la réponse. Si conso.boris.sh répond par une page HTML de blocage, il la convertit en erreur JSON explicite (« Requête bloquée par le pare-feu de conso.boris.sh »).</li>
       </ol>
-      <h3>Déploiement automatique du Worker Cloudflare</h3>
-      <p>Pour ne pas redéployer à la main, connectez le repo GitHub au Worker : le proxy est alors redéployé automatiquement à chaque push.</p>
-      <ol>
-        <li>Dans le tableau de bord Cloudflare : <em>Workers &amp; Pages</em> → le Worker <code>optiwatt-proxy</code> → <em>Settings → Build</em> → <em>Connect</em>. S'il n'existe pas encore : <em>Create → Import a repository</em>.</li>
-        <li>Autorisez l'application Cloudflare sur GitHub, puis choisissez le dépôt.</li>
-        <li>Réglages de build : branche <code>master</code>, <em>Root directory</em> <code>proxy</code>, <em>Deploy command</em> <code>npx wrangler deploy</code>, sans <em>Build command</em>.</li>
-        <li><em>Build watch paths</em> : <code>proxy/*</code>, pour ne redéployer que lorsque le proxy change.</li>
-      </ol>
-      <p class="callout">Le nom du Worker dans Cloudflare doit être identique au champ <code>name</code> de <code>wrangler.toml</code> (<code>optiwatt-proxy</code>). Gérez <code>ALLOWED_ORIGINS</code> dans <code>wrangler.toml</code> et non dans le tableau de bord : chaque déploiement réapplique les variables du fichier.</p>
+
+      <h3>Cache de 12 h par requête</h3>
+      <p>Les données Enedis ne changent qu'une fois par jour. Redemander la même période plusieurs fois n'apporte rien et consomme le quota partagé. Le relais garde donc chaque réponse pendant 12 h.</p>
+      <table>
+        <tr><th>Question</th><th>Réponse</th></tr>
+        <tr><td>Qu'est-ce qu'« une même requête » ?</td><td>Même type de données, mêmes paramètres (PRM, date de début, date de fin) et même token. La clé du cache est l'empreinte SHA-256 de ces éléments : changer une seule date, ou utiliser un autre token, donne une autre requête.</td></tr>
+        <tr><td>Qu'est-ce qui est mis en cache ?</td><td>Uniquement les réponses réussies (HTTP 200). Une erreur (token invalide, données pas encore publiées…) n'est jamais conservée : vous pouvez réessayer après avoir corrigé le problème.</td></tr>
+        <tr><td>Combien de temps ?</td><td>12 heures à partir du premier appel. Passé ce délai, la requête suivante interroge à nouveau conso.boris.sh, et la nouvelle réponse repart pour 12 h.</td></tr>
+        <tr><td>Où ?</td><td>En mémoire vive du relais. Le cache est vidé à chaque redémarrage ou redéploiement.</td></tr>
+        <tr><td>Comment le savoir ?</td><td>L'application précise « servies par le cache du relais » sous le formulaire. Techniquement, l'en-tête de réponse <code>X-OptiWatt-Cache</code> vaut <code>HIT</code> (cache) ou <code>MISS</code> (appel réel).</td></tr>
+      </table>
+      <p>Exemple : vous affichez les 7 jours jusqu'au 22/11 à 9 h, puis vous rechargez la page à 15 h et relancez la même demande. La seconde réponse vient du cache, et Enedis n'est pas sollicité.</p>
+      <p>S'y ajoute un cache dans votre navigateur : pendant la session (tant que l'onglet reste ouvert), la même demande n'est même pas envoyée au relais.</p>
+
+      <h3>Limite de 10 requêtes par heure et par IP</h3>
+      <p>Tous les utilisateurs passent par le relais, donc par <em>une seule</em> adresse IP vue de conso.boris.sh. Si un utilisateur (ou un script) envoyait des requêtes en boucle, c'est l'IP du relais qui serait bloquée, et le service tomberait pour tout le monde. La limite protège contre ce scénario.</p>
+      <table>
+        <tr><th>Question</th><th>Réponse</th></tr>
+        <tr><td>Que compte-t-on ?</td><td>Les appels réellement transmis à conso.boris.sh. Les réponses servies par le cache <strong>ne comptent pas</strong>. Les requêtes refusées par le relais (origine, paramètres) non plus. Les appels qui aboutissent à une erreur de conso.boris.sh, eux, comptent.</td></tr>
+        <tr><td>Par qui ?</td><td>Par adresse IP du visiteur, celle de votre box ou de votre connexion mobile, transmise par Railway. Plusieurs personnes derrière la même box partagent donc le même compteur.</td></tr>
+        <tr><td>Sur quelle période ?</td><td>Une heure glissante : à chaque requête, le relais compte les appels des 60 dernières minutes. Il n'y a pas de remise à zéro à heure fixe.</td></tr>
+        <tr><td>Que se passe-t-il au-delà ?</td><td>Le relais répond <code>429</code> (« Limite de 10 requêtes par heure atteinte, réessayez plus tard ») sans contacter conso.boris.sh. Le compteur redescend au fur et à mesure que les appels les plus anciens dépassent une heure.</td></tr>
+        <tr><td>Est-ce suffisant ?</td><td>Oui pour un usage normal. Afficher sa semaine prend 1 appel, et même en testant plusieurs périodes et plusieurs compteurs, on reste loin de 10 par heure.</td></tr>
+      </table>
+
+      <h3>Réglages</h3>
+      <table>
+        <tr><th>Variable (Railway → Variables)</th><th>Défaut</th><th>Rôle</th></tr>
+        <tr><td><code>ALLOWED_ORIGINS</code></td><td><code>https://elmetayer.github.io</code>, <code>http://localhost:5173</code>, <code>http://localhost:4173</code></td><td>Sites autorisés à utiliser le relais, séparés par des virgules (domaine seul, sans chemin ni slash final).</td></tr>
+        <tr><td><code>CACHE_HOURS</code></td><td><code>12</code></td><td>Durée de conservation d'une réponse, en heures.</td></tr>
+        <tr><td><code>RATE_LIMIT</code></td><td><code>10</code></td><td>Nombre maximal d'appels à conso.boris.sh par IP et par heure glissante.</td></tr>
+        <tr><td><code>PORT</code></td><td>fourni par Railway</td><td>Port d'écoute (<code>8787</code> en local).</td></tr>
+      </table>
+      <p>Le relais expose aussi <code>/healthz</code>, qui répond <code>OptiWatt relay OK</code>. Railway s'en sert pour vérifier que le service tourne.</p>
+
+      <h3>Limite connue</h3>
+      <p>Le cache et la limite réduisent fortement le risque, mais toutes les requêtes partent toujours de la même IP. Si OptiWatt devenait très utilisé, le volume cumulé pourrait être jugé excessif par conso.boris.sh. La parade serait que chacun lance le relais sur sa propre machine (<code>python server/main.py</code>, puis <code>http://localhost:8787</code> comme URL du relais), pour que les appels partent de sa propre connexion.</p>
 
       <h2 id="deploiement">9. Déployer sa propre instance</h2>
+      <h3>Le site (GitHub Pages)</h3>
       <ol>
         <li>Forkez le dépôt GitHub.</li>
-        <li>Déployez le proxy (§ 8) et ajoutez l'URL de votre site (<code>https://&lt;user&gt;.github.io</code>) dans <code>ALLOWED_ORIGINS</code> (<code>proxy/wrangler.toml</code>).</li>
-        <li>Dans <em>Settings → Secrets and variables → Actions → Variables</em>, créez la variable <code>VITE_PROXY_URL</code> avec l'URL du proxy.</li>
         <li>Dans <em>Settings → Pages</em>, choisissez « Source : GitHub Actions ».</li>
-        <li>Chaque push sur <code>master</code> déclenche le workflow <code>.github/workflows/deploy.yml</code>, qui lance les tests, construit le site et le publie sur <code>https://&lt;user&gt;.github.io/&lt;repo&gt;/</code>.</li>
+        <li>Chaque push sur <code>master</code> déclenche le workflow <code>.github/workflows/deploy.yml</code>. Il lance les tests (JS, relais, CLI), construit le site et le publie sur <code>https://&lt;user&gt;.github.io/&lt;repo&gt;/</code>. Il peut aussi être relancé à la main : <em>Actions → Run workflow</em>.</li>
+      </ol>
+      <h3>Le relais (Railway)</h3>
+      <ol>
+        <li>Sur <a href="https://railway.com">railway.com</a> : <em>New Project → Deploy from GitHub repo</em>, puis choisissez votre fork.</li>
+        <li>Dans le service : <em>Settings → Source → Root Directory</em> = <code>server</code>. Le fichier <code>server/railway.json</code> fournit la commande de démarrage (<code>python main.py</code>) et le contrôle de santé (<code>/healthz</code>). Railway redéploie le relais à chaque push qui modifie <code>server/</code>.</li>
+        <li><em>Settings → Networking → Generate Domain</em> donne l'URL publique, de la forme <code>https://….up.railway.app</code>.</li>
+        <li>Dans <em>Variables</em>, définissez <code>ALLOWED_ORIGINS</code> avec l'adresse de votre site (<code>https://&lt;user&gt;.github.io</code>).</li>
+        <li>Vérifiez : <code>https://….up.railway.app/healthz</code> doit afficher <code>OptiWatt relay OK</code>.</li>
+      </ol>
+      <h3>Relier les deux</h3>
+      <ol>
+        <li>Dans GitHub : <em>Settings → Secrets and variables → Actions → onglet Variables → New repository variable</em>. Nom : <code>VITE_PROXY_URL</code>, valeur : l'URL Railway, sans slash final.</li>
+        <li>Relancez le workflow (<em>Actions → Run workflow</em>) : l'URL est intégrée au site à la construction, et le champ « URL du relais » sera pré-rempli pour tous les visiteurs.</li>
       </ol>
 
       <h2 id="python">10. Outil Python (CLI)</h2>
@@ -163,7 +199,7 @@ optiwatt summary octobre.csv    # indicateurs dans le terminal</code></pre>
       <table>
         <tr><th>Dossier</th><th>Contenu</th></tr>
         <tr><td><code>web/</code></td><td>Application (HTML/CSS/JS, <a href="https://vite.dev">Vite</a>, <a href="https://observablehq.com/plot/">Observable Plot</a>). <code>src/data.js</code> contient le parsing et l'agrégation, testés avec Vitest.</td></tr>
-        <tr><td><code>proxy/</code></td><td>Cloudflare Worker CORS.</td></tr>
+        <tr><td><code>server/</code></td><td>Relais Python vers conso.boris.sh (Railway), testé avec pytest.</td></tr>
         <tr><td><code>python/</code></td><td>CLI et bibliothèque Python, testés avec pytest.</td></tr>
         <tr><td><code>legacy/</code></td><td>Ancienne application R Shiny, conservée pour référence.</td></tr>
       </table>
@@ -178,7 +214,13 @@ npm run build     # sortie dans web/dist</code></pre>
         <dt><strong>« Token invalide ou sans accès à ce PRM »</strong></dt>
         <dd>Le token a expiré ou correspond à un autre compteur : refaites le consentement sur conso.boris.sh.</dd>
         <dt><strong>« L'appel direct est bloqué (CORS) »</strong></dt>
-        <dd>Aucun proxy n'est configuré : renseignez son URL dans les paramètres avancés.</dd>
+        <dd>Le champ « URL du relais » est vide : renseignez-le dans les paramètres avancés.</dd>
+        <dt><strong>« Limite de 10 requêtes par heure atteinte »</strong></dt>
+        <dd>Votre connexion a déclenché 10 appels réels dans l'heure (voir <a href="#relais">§ 8</a>). Patientez : chaque appel cesse de compter une heure après avoir été fait.</dd>
+        <dt><strong>« Requête bloquée par le pare-feu de conso.boris.sh »</strong></dt>
+        <dd>conso.boris.sh refuse l'IP du relais. Ce n'est pas un problème de token. Il est inutile d'insister : utilisez l'import CSV, ou lancez le relais sur votre machine (§ 8, « Limite connue »).</dd>
+        <dt><strong>« Le relais est injoignable »</strong></dt>
+        <dd>Vérifiez l'URL, ou ouvrez <code>…/healthz</code> : le service Railway est peut-être en cours de redéploiement.</dd>
         <dt><strong>« Aucune donnée sur cette période »</strong></dt>
         <dd>La collecte de la courbe de charge n'est pas activée, ou la période ne contient que la journée en cours.</dd>
         <dt><strong>Le CSV n'est pas reconnu</strong></dt>
