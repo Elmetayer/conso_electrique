@@ -6,3 +6,7 @@ compatibility_date = "2026-11-01"
 [vars]
 # Origines autorisées, séparées par des virgules (le site GitHub Pages + le dev local)
 ALLOWED_ORIGINS = "https://elmetayer.github.io,http://localhost:5173,http://localhost:4173"
+
+# Bloc requis par Cloudflare pour les builds des branches autres que master
+# (PR) : ils créent une préversion du proxy au lieu de le déployer.
+[previews]
