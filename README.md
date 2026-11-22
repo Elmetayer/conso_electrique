@@ -32,6 +32,6 @@ cd ../python && pip install -e ".[dev]" && pytest
 
 1. Proxy : connecter le repo au Worker dans Cloudflare (*Settings → Build*, root directory `proxy`, deploy command `npx wrangler deploy`) → redéployé automatiquement à chaque push. Les origines autorisées se gèrent dans `proxy/wrangler.toml` (`ALLOWED_ORIGINS`).
 2. Variable de dépôt `VITE_PROXY_URL` = URL du worker (*Settings → Secrets and variables → Actions → Variables*).
-3. *Settings → Pages → Source : GitHub Actions*. Chaque push sur `main` teste, construit et publie.
+3. *Settings → Pages → Source : GitHub Actions*. Chaque push sur `master` teste, construit et publie.
 
 Le détail est dans la [documentation](web/docs.html).
