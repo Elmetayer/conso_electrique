@@ -53,10 +53,10 @@
         <label class="check span-2"><input name="remember" type="checkbox" /> Mémoriser le PRM et le token sur cet appareil</label>
         <details class="span-2">
           <summary>Paramètres avancés</summary>
-          <label>URL du proxy CORS
-            <input name="proxy" type="url" placeholder="https://optiwatt-proxy.votre-compte.workers.dev" />
+          <label>URL du relais
+            <input name="proxy" type="url" placeholder="https://consoelectrique-production.up.railway.app" />
           </label>
-          <p class="hint">Laisser vide pour appeler conso.boris.sh directement (bloqué par la plupart des navigateurs). Voir <a href="docs.html#proxy">la documentation</a>.</p>
+          <p class="hint">Pré-rempli avec le relais officiel. Vous pouvez indiquer votre propre relais (voir <a href="docs.html#relais">la documentation</a>). Laisser vide pour appeler conso.boris.sh directement (bloqué par les navigateurs).</p>
         </details>
         <div class="span-2 actions">
           <button type="submit" class="primary">Afficher</button>
@@ -73,7 +73,7 @@
         </div>
       </div>
       <aside class="card note">
-        <strong>Bon usage de l'API</strong> — Enedis ne met à jour les données qu'une fois par jour et le quota est partagé par tous les utilisateurs de conso.boris.sh. Une requête par jour suffit : les résultats sont gardés en cache pendant la session. La courbe de charge est limitée à 7 jours par appel.
+        <strong>Bon usage de l'API</strong> — Enedis ne met à jour les données qu'une fois par jour et le quota est partagé par tous les utilisateurs de conso.boris.sh. Une requête par jour suffit : les résultats sont gardés en cache (12 h sur le relais, et pendant la session dans votre navigateur). La courbe de charge est limitée à 7 jours par appel.
       </aside>
     </section>
 

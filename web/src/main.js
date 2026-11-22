@@ -111,7 +111,9 @@ const apiPanel = makePanel(document.getElementById('panel-api'), {
   apiForm.token.value = saved.token ?? '';
   apiForm.remember.checked = Boolean(saved.prm);
   apiForm.cap.value = String(saved.cap ?? 6000);
-  apiForm.proxy.value = saved.proxy || ENV_PROXY;
+  // Les anciennes URL de Worker Cloudflare (bloqué par conso.boris.sh) sont ignorées
+  const savedProxy = saved.proxy && !/workers\.dev/.test(saved.proxy) ? saved.proxy : '';
+  apiForm.proxy.value = savedProxy || ENV_PROXY;
   apiForm.end.value = new Date().toLocaleDateString('sv-SE'); // AAAA-MM-JJ en heure locale
   apiForm.end.max = apiForm.end.value;
   apiForm.days.addEventListener('input', () => (apiForm.daysOut.value = apiForm.days.value));
@@ -147,7 +149,8 @@ apiForm.addEventListener('submit', async (e) => {
     const points = await fetchLoadCurve({ prm, token, dateDebut, dateFin, baseUrl: proxy });
     cache.set(key, points);
     apiPanel.setPoints(points);
-    apiPanel.status(`${points.length} mesures reçues (${dateDebut} → ${dateFin}).`, 'ok');
+    const origin = points.fromRelayCache ? ' — servies par le cache du relais, sans nouvel appel à Enedis' : '';
+    apiPanel.status(`${points.length} mesures reçues (${dateDebut} → ${dateFin})${origin}.`, 'ok');
   } catch (err) {
     apiPanel.status(err.message, 'error');
   } finally {

@@ -8,7 +8,6 @@ conso_electrique.Rproj
 # JS
 node_modules/
 dist/
-.wrangler/
 # Python
 __pycache__/
 *.egg-info/
