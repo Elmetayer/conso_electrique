@@ -31,7 +31,7 @@ export async function fetchLoadCurve({ prm, token, dateDebut, dateFin, baseUrl }
     const messages = {
       400: 'Requête invalide : vérifiez le PRM (14 chiffres) et les dates',
       401: "Token invalide ou sans accès à ce PRM",
-      403: "Accès refusé (proxy : origine non autorisée ?)",
+      403: 'Accès refusé',
       429: 'Trop de requêtes : réessayez plus tard',
     };
     throw new Error((messages[res.status] ?? `Erreur ${res.status} côté Enedis ou conso.boris.sh, réessayez plus tard`) + detail);

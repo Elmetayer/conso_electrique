@@ -1,0 +1,2 @@
+# Aucune dépendance : le relais n'utilise que la bibliothèque standard Python.
+# Ce fichier permet à Railway de détecter un projet Python.

@@ -123,7 +123,16 @@ npm install -g wrangler        # une seule fois
 wrangler login
 wrangler deploy                # affiche l'URL https://optiwatt-proxy.&lt;compte&gt;.workers.dev</code></pre>
       <p>L'offre gratuite de Cloudflare Workers (100 000 requêtes/jour) est très largement suffisante.</p>
-      <h3>Déploiement automatique (recommandé)</h3>
+      <p class="callout">⚠️ Constaté le 22/11/2026 : conso.boris.sh bloque les requêtes émises depuis Cloudflare Workers (page « Attention Required »), dont les IP sont partagées. Le relais Python ci-dessous est l'alternative en cours de test.</p>
+      <h3>Relais Python sur Railway</h3>
+      <p>Le dossier <code>server/</code> contient un relais équivalent en Python (bibliothèque standard), avec un cache de 12 h par requête et une limite de 10 requêtes par heure et par IP.</p>
+      <ol>
+        <li>Sur <a href="https://railway.com">railway.com</a> : <em>New Project → Deploy from GitHub repo</em> → <code>conso_electrique</code>.</li>
+        <li>Dans le service : <em>Settings → Source → Root Directory</em> = <code>server</code>. Le fichier <code>server/railway.json</code> fournit la commande de démarrage et le healthcheck.</li>
+        <li><em>Settings → Networking → Generate Domain</em> : vous obtenez l'URL publique <code>https://….up.railway.app</code>.</li>
+        <li>Utilisez cette URL comme « URL du proxy » (paramètres avancés ou variable <code>VITE_PROXY_URL</code>).</li>
+      </ol>
+      <h3>Déploiement automatique du Worker Cloudflare</h3>
       <p>Pour ne pas redéployer à la main, connectez le repo GitHub au Worker : le proxy est alors redéployé automatiquement à chaque push.</p>
       <ol>
         <li>Dans le tableau de bord Cloudflare : <em>Workers &amp; Pages</em> → le Worker <code>optiwatt-proxy</code> → <em>Settings → Build</em> → <em>Connect</em>. S'il n'existe pas encore : <em>Create → Import a repository</em>.</li>
