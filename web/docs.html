@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Documentation – OptiWatt</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./"><img src="favicon.svg" alt="" width="22" height="22" /> OptiWatt</a>
+    <nav>
+      <a href="./">Application</a>
+      <a href="docs.html" aria-current="page">Documentation</a>
+      <a href="https://github.com/Elmetayer/conso_electrique" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="container doc">
+    <nav class="toc" aria-label="Sommaire">
+      <ol>
+        <li><a href="#principe">Principe</a></li>
+        <li><a href="#token">Obtenir son token</a></li>
+        <li><a href="#api">Onglet « Ma consommation »</a></li>
+        <li><a href="#csv">Onglet « Import d'un fichier »</a></li>
+        <li><a href="#lecture">Lire les heatmaps</a></li>
+        <li><a href="#limites">Limites et bon usage</a></li>
+        <li><a href="#confidentialite">Confidentialité</a></li>
+        <li><a href="#proxy">Le proxy CORS</a></li>
+        <li><a href="#deploiement">Déployer sa propre instance</a></li>
+        <li><a href="#python">Outil Python (CLI)</a></li>
+        <li><a href="#dev">Développement</a></li>
+        <li><a href="#faq">FAQ / dépannage</a></li>
+      </ol>
+    </nav>
+
+    <article>
+      <h1>Documentation</h1>
+      <p>OptiWatt permet à chacun de visualiser la consommation électrique de son compteur Linky sous forme de <em>heatmaps</em> (jour × heure), pour repérer d'un coup d'œil les talons de consommation, les pics et les habitudes.</p>
+
+      <h2 id="principe">1. Principe</h2>
+      <p>L'application est un site statique hébergé sur GitHub Pages. Elle s'appuie sur <a href="https://conso.boris.sh">Conso API</a> (conso.boris.sh), un service gratuit qui relaie les API officielles d'Enedis, et propose deux façons de charger des données :</p>
+      <ul>
+        <li><strong>Par l'API</strong> : la courbe de charge (puissance par pas de 30 min) des 1 à 7 derniers jours, avec votre PRM et votre token ;</li>
+        <li><strong>Par import d'un fichier CSV</strong> téléchargé depuis votre espace client Enedis, sans limite de durée.</li>
+      </ul>
+      <pre><code>Navigateur (GitHub Pages) ──► Proxy CORS (Cloudflare Worker) ──► conso.boris.sh ──► Enedis
+        ▲
+        └── import CSV (traité localement, rien n'est envoyé)</code></pre>
+
+      <h2 id="token">2. Obtenir son token</h2>
+      <ol>
+        <li>Rendez-vous sur <a href="https://conso.boris.sh">conso.boris.sh</a> et cliquez sur le bouton d'accès à votre espace Enedis.</li>
+        <li>Connectez-vous à votre compte Enedis et <strong>autorisez le partage</strong> de vos données (consommation, courbe de charge).</li>
+        <li>Vous êtes redirigé vers une page qui affiche votre <strong>token</strong> (une longue chaîne de la forme <code>xxx.yyy.zzz</code>). Copiez-le.</li>
+        <li>Votre <strong>PRM</strong> (ou PDL) est l'identifiant à 14 chiffres de votre compteur : il figure sur votre facture et dans votre espace client Enedis, et s'affiche sur l'écran du Linky (touche +).</li>
+      </ol>
+      <p class="callout">La collecte de la courbe de charge doit être activée dans votre espace client Enedis (« Gérer l'accès à mes données »). Sans cela, l'API ne renvoie rien pour les mesures au pas de 30 minutes.</p>
+
+      <h2 id="api">3. Onglet « Ma consommation »</h2>
+      <table>
+        <tr><th>Champ</th><th>Rôle</th></tr>
+        <tr><td>PRM</td><td>Identifiant à 14 chiffres du compteur.</td></tr>
+        <tr><td>Token</td><td>Token personnel fourni par conso.boris.sh.</td></tr>
+        <tr><td>Puissance souscrite</td><td>Plafond de l'échelle de couleur (en W ≈ kVA × 1000). Les valeurs supérieures sont affichées à la couleur maximale et signalées « plafonnée » dans l'infobulle. « Automatique » n'applique aucun plafond et cale l'échelle sur le 99<sup>e</sup> centile des valeurs, pour qu'un pic isolé n'écrase pas les contrastes.</td></tr>
+        <tr><td>Agrégation horaire</td><td>Chaque case représente une heure, qui regroupe deux mesures de 30 min. <em>Maximum</em> fait ressortir les pics, <em>Moyenne</em> reflète l'énergie consommée.</td></tr>
+        <tr><td>Nombre de jours / Jusqu'au</td><td>Période demandée : les N jours qui précèdent la date choisie (exclue). Les données de la veille sont disponibles chaque matin.</td></tr>
+        <tr><td>Mémoriser</td><td>Enregistre le PRM et le token dans le stockage local de ce navigateur uniquement.</td></tr>
+        <tr><td>Paramètres avancés</td><td>URL du proxy CORS (voir <a href="#proxy">§ 8</a>). Pré-remplie sur l'instance officielle.</td></tr>
+      </table>
+      <p>Le résultat affiche trois indicateurs (période, énergie consommée, pic de puissance) et la heatmap. Les boutons <strong>PNG</strong>, <strong>SVG</strong> et <strong>Données CSV</strong> permettent d'exporter le graphique ou les mesures brutes, au même format que l'espace client Enedis : le fichier est donc réimportable dans l'onglet « Import ».</p>
+
+      <h2 id="csv">4. Onglet « Import d'un fichier Enedis »</h2>
+      <ol>
+        <li>Dans votre <a href="https://mon-compte-particulier.enedis.fr">espace client Enedis</a>, ouvrez « Suivre mes mesures », choisissez la <strong>courbe de charge</strong> et la période voulue, puis téléchargez les données au format CSV.</li>
+        <li>Importez le fichier dans OptiWatt. Le format attendu est celui d'Enedis : quelques lignes d'en-tête, puis une ligne <code>Horodate;Valeur</code> suivie des mesures (séparateur <code>;</code> ou <code>,</code>, horodatage ISO ou <code>JJ/MM/AAAA hh:mm</code>).</li>
+        <li>Choisissez la vue :
+          <ul>
+            <li><strong>Par mois</strong> : un petit graphique par mois (jours en abscisse, heures en ordonnée, 0 h en haut) ;</li>
+            <li><strong>Long</strong> : une ligne par jour, la plus récente en haut.</li>
+          </ul>
+        </li>
+      </ol>
+      <p>Le bouton « Charger des données d'exemple » génère une année fictive pour tester l'outil sans compte Enedis.</p>
+
+      <h2 id="lecture">5. Lire les heatmaps</h2>
+      <ul>
+        <li><strong>Couleur</strong> : plus la case est foncée, plus la puissance appelée est forte. L'échelle va de 0 au plafond choisi.</li>
+        <li><strong>Bande nocturne régulière</strong> (par ex. 1 h–4 h) : souvent le chauffe-eau asservi aux heures creuses.</li>
+        <li><strong>Fond jamais clair</strong> : talon de consommation élevé (appareils en veille, réfrigérateur, VMC…).</li>
+        <li><strong>Mois d'hiver plus foncés</strong> : part du chauffage électrique.</li>
+        <li><strong>Cases au plafond</strong> : risque de dépassement de la puissance souscrite (disjonction).</li>
+      </ul>
+      <p>Survolez ou touchez une case pour afficher le jour, l'heure et la valeur exacte.</p>
+
+      <h2 id="limites">6. Limites et bon usage</h2>
+      <ul>
+        <li>Quotas Enedis partagés par <em>tous</em> les utilisateurs de Conso API : 5 requêtes/s et 10 000 requêtes/h. Les abus peuvent entraîner un blocage d'IP.</li>
+        <li>Enedis ne met à jour les données qu'<strong>une fois par jour</strong> : une requête quotidienne suffit. OptiWatt garde les résultats en cache le temps de la session et ne rappelle pas l'API pour une même période.</li>
+        <li>La courbe de charge est limitée à <strong>7 jours par requête</strong>. Pour un historique plus long, utilisez l'import CSV ou l'outil Python, qui découpe automatiquement la période.</li>
+        <li>Le plafond « kVA × 1000 » est une approximation : la puissance souscrite est apparente (VA), alors que la courbe de charge mesure une puissance active (W).</li>
+      </ul>
+
+      <h2 id="confidentialite">7. Confidentialité</h2>
+      <ul>
+        <li>Aucun serveur OptiWatt ne stocke vos données : les graphiques sont calculés dans votre navigateur.</li>
+        <li>Les fichiers CSV importés ne quittent pas votre appareil.</li>
+        <li>Lors d'un appel à l'API, le PRM et le token transitent par le proxy jusqu'à conso.boris.sh. Le proxy fourni ne journalise rien. Vous pouvez déployer le vôtre (§ 8).</li>
+        <li>Si vous cochez « Mémoriser », le token est conservé en clair dans le stockage local de votre navigateur. Ne l'activez pas sur un appareil partagé.</li>
+      </ul>
+
+      <h2 id="proxy">8. Le proxy CORS</h2>
+      <p>Pour des raisons de sécurité, un navigateur n'autorise une page à appeler un autre domaine que si ce domaine l'accepte explicitement (en-têtes CORS). Comme conso.boris.sh n'envoie pas ces en-têtes, une page hébergée sur <code>github.io</code> ne peut pas l'appeler directement.</p>
+      <p>Le dossier <code>proxy/</code> contient un Cloudflare Worker d'une cinquantaine de lignes qui :</p>
+      <ul>
+        <li>n'accepte que les requêtes <code>GET /api/&lt;type&gt;</code> vers les types de données Conso API ;</li>
+        <li>relaie l'en-tête <code>Authorization</code> vers conso.boris.sh, avec un <code>User-Agent</code> identifiant OptiWatt, comme le recommande Conso API ;</li>
+        <li>ajoute les en-têtes CORS pour les seules origines autorisées (<code>ALLOWED_ORIGINS</code>) ;</li>
+        <li>ne stocke et ne journalise aucune donnée.</li>
+      </ul>
+      <pre><code>cd proxy
+npm install -g wrangler        # une seule fois
+wrangler login
+wrangler deploy                # affiche l'URL https://optiwatt-proxy.&lt;compte&gt;.workers.dev</code></pre>
+      <p>L'offre gratuite de Cloudflare Workers (100 000 requêtes/jour) est très largement suffisante.</p>
+
+      <h2 id="deploiement">9. Déployer sa propre instance</h2>
+      <ol>
+        <li>Forkez le dépôt GitHub.</li>
+        <li>Déployez le proxy (§ 8) et ajoutez l'URL de votre site (<code>https://&lt;user&gt;.github.io</code>) dans <code>ALLOWED_ORIGINS</code> (<code>proxy/wrangler.toml</code>).</li>
+        <li>Dans <em>Settings → Secrets and variables → Actions → Variables</em>, créez la variable <code>VITE_PROXY_URL</code> avec l'URL du proxy.</li>
+        <li>Dans <em>Settings → Pages</em>, choisissez « Source : GitHub Actions ».</li>
+        <li>Chaque push sur <code>main</code> déclenche le workflow <code>.github/workflows/deploy.yml</code>, qui lance les tests, construit le site et le publie sur <code>https://&lt;user&gt;.github.io/&lt;repo&gt;/</code>.</li>
+      </ol>
+
+      <h2 id="python">10. Outil Python (CLI)</h2>
+      <p>Le dossier <code>python/</code> fournit le paquet <code>optiwatt</code>. Exécuté hors navigateur, il n'est pas concerné par le CORS : il récupère la courbe de charge sur une période longue, en la découpant en tranches de 7 jours espacées dans le temps, et produit un CSV directement importable dans l'application.</p>
+      <pre><code>cd python
+pip install -e .
+export CONSO_TOKEN="xxx.yyy.zzz"
+optiwatt fetch --prm 12345678901234 --start 2026-10-01 --end 2026-11-01 -o octobre.csv
+optiwatt summary octobre.csv    # indicateurs dans le terminal</code></pre>
+
+      <h2 id="dev">11. Développement</h2>
+      <table>
+        <tr><th>Dossier</th><th>Contenu</th></tr>
+        <tr><td><code>web/</code></td><td>Application (HTML/CSS/JS, <a href="https://vite.dev">Vite</a>, <a href="https://observablehq.com/plot/">Observable Plot</a>). <code>src/data.js</code> contient le parsing et l'agrégation, testés avec Vitest.</td></tr>
+        <tr><td><code>proxy/</code></td><td>Cloudflare Worker CORS.</td></tr>
+        <tr><td><code>python/</code></td><td>CLI et bibliothèque Python, testés avec pytest.</td></tr>
+        <tr><td><code>legacy/</code></td><td>Ancienne application R Shiny, conservée pour référence.</td></tr>
+      </table>
+      <pre><code>cd web
+npm install
+npm run dev       # http://localhost:5173  (?demo pour charger l'exemple)
+npm test
+npm run build     # sortie dans web/dist</code></pre>
+
+      <h2 id="faq">12. FAQ / dépannage</h2>
+      <dl>
+        <dt><strong>« Token invalide ou sans accès à ce PRM »</strong></dt>
+        <dd>Le token a expiré ou correspond à un autre compteur : refaites le consentement sur conso.boris.sh.</dd>
+        <dt><strong>« L'appel direct est bloqué (CORS) »</strong></dt>
+        <dd>Aucun proxy n'est configuré : renseignez son URL dans les paramètres avancés.</dd>
+        <dt><strong>« Aucune donnée sur cette période »</strong></dt>
+        <dd>La collecte de la courbe de charge n'est pas activée, ou la période ne contient que la journée en cours.</dd>
+        <dt><strong>Le CSV n'est pas reconnu</strong></dt>
+        <dd>Vérifiez qu'il s'agit bien de la courbe de charge, et non des index ou des consommations journalières, et que le fichier contient une colonne « Horodate ».</dd>
+      </dl>
+    </article>
+  </main>
+
+  <footer class="footer">OptiWatt — projet open source.</footer>
+  <script type="module">import './src/style.css';</script>
+</body>
+</html>

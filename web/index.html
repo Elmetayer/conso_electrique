@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OptiWatt – Ma consommation électrique</title>
+  <meta name="description" content="Visualisez la consommation de votre compteur Linky sous forme de heatmaps, directement dans votre navigateur." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./"><img src="favicon.svg" alt="" width="22" height="22" /> OptiWatt</a>
+    <nav>
+      <a href="./" aria-current="page">Application</a>
+      <a href="docs.html">Documentation</a>
+      <a href="https://github.com/Elmetayer/conso_electrique" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="true">Ma consommation (API)</button>
+      <button role="tab" id="tab-csv" aria-controls="panel-csv" aria-selected="false">Import d'un fichier Enedis</button>
+    </div>
+
+    <!-- ===== Onglet API ===== -->
+    <section id="panel-api" role="tabpanel" aria-labelledby="tab-api">
+      <form id="api-form" class="card form-grid" autocomplete="off">
+        <label>Numéro de PRM (PDL)
+          <input name="prm" required inputmode="numeric" pattern="\d{14}" maxlength="14" placeholder="14 chiffres" />
+        </label>
+        <label>Token conso.boris.sh
+          <span class="with-btn">
+            <input name="token" type="password" required placeholder="xxx.yyy.zzz" />
+            <button type="button" class="ghost" data-toggle-token aria-label="Afficher le token">👁</button>
+          </span>
+        </label>
+        <label>Puissance souscrite (plafond)
+          <select name="cap" data-cap></select>
+        </label>
+        <label>Agrégation horaire
+          <select name="agg">
+            <option value="max" selected>Maximum de l'heure</option>
+            <option value="mean">Moyenne de l'heure</option>
+          </select>
+        </label>
+        <label>Nombre de jours : <output name="daysOut">7</output>
+          <input name="days" type="range" min="1" max="7" value="7" />
+        </label>
+        <label>Jusqu'au (exclu)
+          <input name="end" type="date" required />
+        </label>
+        <label class="check span-2"><input name="remember" type="checkbox" /> Mémoriser le PRM et le token sur cet appareil</label>
+        <details class="span-2">
+          <summary>Paramètres avancés</summary>
+          <label>URL du proxy CORS
+            <input name="proxy" type="url" placeholder="https://optiwatt-proxy.votre-compte.workers.dev" />
+          </label>
+          <p class="hint">Laisser vide pour appeler conso.boris.sh directement (bloqué par la plupart des navigateurs). Voir <a href="docs.html#proxy">la documentation</a>.</p>
+        </details>
+        <div class="span-2 actions">
+          <button type="submit" class="primary">Afficher</button>
+          <span class="status" data-status role="status"></span>
+        </div>
+      </form>
+      <div class="card result">
+        <div class="kpis" data-kpis></div>
+        <div class="chart" data-chart></div>
+        <div class="exports" data-exports hidden>
+          <button type="button" data-export="png">PNG</button>
+          <button type="button" data-export="svg">SVG</button>
+          <button type="button" data-export="csv">Données CSV</button>
+        </div>
+      </div>
+      <aside class="card note">
+        <strong>Bon usage de l'API</strong> — Enedis ne met à jour les données qu'une fois par jour et le quota est partagé par tous les utilisateurs de conso.boris.sh. Une requête par jour suffit : les résultats sont gardés en cache pendant la session. La courbe de charge est limitée à 7 jours par appel.
+      </aside>
+    </section>
+
+    <!-- ===== Onglet CSV ===== -->
+    <section id="panel-csv" role="tabpanel" aria-labelledby="tab-csv" hidden>
+      <form id="csv-form" class="card form-grid">
+        <label class="span-2 file">Fichier CSV Enedis (courbe de charge)
+          <input name="file" type="file" accept=".csv,text/csv,text/plain" />
+        </label>
+        <label>Type de graphique
+          <select name="view">
+            <option value="month" selected>Par mois</option>
+            <option value="long">Long (un jour par ligne)</option>
+          </select>
+        </label>
+        <label>Plafond
+          <select name="cap" data-cap></select>
+        </label>
+        <label>Agrégation horaire
+          <select name="agg">
+            <option value="mean" selected>Moyenne de l'heure</option>
+            <option value="max">Maximum de l'heure</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button type="button" class="ghost" data-demo>Charger des données d'exemple</button>
+        </div>
+        <span class="status span-2" data-status role="status"></span>
+      </form>
+      <div class="card result">
+        <div class="kpis" data-kpis></div>
+        <div class="chart" data-chart></div>
+        <div class="exports" data-exports hidden>
+          <button type="button" data-export="png">PNG</button>
+          <button type="button" data-export="svg">SVG</button>
+          <button type="button" data-export="csv">Données CSV</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Données : <a href="https://conso.boris.sh" rel="noopener">Conso API</a> / Enedis. Vos données restent dans votre navigateur.
+  </footer>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
