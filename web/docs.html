@@ -123,6 +123,15 @@ npm install -g wrangler        # une seule fois
 wrangler login
 wrangler deploy                # affiche l'URL https://optiwatt-proxy.&lt;compte&gt;.workers.dev</code></pre>
       <p>L'offre gratuite de Cloudflare Workers (100 000 requêtes/jour) est très largement suffisante.</p>
+      <h3>Déploiement automatique (recommandé)</h3>
+      <p>Pour ne pas redéployer à la main, connectez le repo GitHub au Worker : le proxy est alors redéployé automatiquement à chaque push.</p>
+      <ol>
+        <li>Dans le tableau de bord Cloudflare : <em>Workers &amp; Pages</em> → le Worker <code>optiwatt-proxy</code> → <em>Settings → Build</em> → <em>Connect</em>. S'il n'existe pas encore : <em>Create → Import a repository</em>.</li>
+        <li>Autorisez l'application Cloudflare sur GitHub, puis choisissez le dépôt.</li>
+        <li>Réglages de build : branche <code>master</code>, <em>Root directory</em> <code>proxy</code>, <em>Deploy command</em> <code>npx wrangler deploy</code>, sans <em>Build command</em>.</li>
+        <li><em>Build watch paths</em> : <code>proxy/*</code>, pour ne redéployer que lorsque le proxy change.</li>
+      </ol>
+      <p class="callout">Le nom du Worker dans Cloudflare doit être identique au champ <code>name</code> de <code>wrangler.toml</code> (<code>optiwatt-proxy</code>). Gérez <code>ALLOWED_ORIGINS</code> dans <code>wrangler.toml</code> et non dans le tableau de bord : chaque déploiement réapplique les variables du fichier.</p>
 
       <h2 id="deploiement">9. Déployer sa propre instance</h2>
       <ol>
