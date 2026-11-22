@@ -1,7 +1,6 @@
 // Heatmaps de consommation avec Observable Plot (https://observablehq.com/plot/)
 import * as Plot from '@observablehq/plot';
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const DAYS31 = Array.from({ length: 31 }, (_, i) => i + 1);
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 const WEEKDAYS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
@@ -21,37 +20,49 @@ function colorScale(rows, cap) {
   return { type: 'linear', scheme: 'reds', domain: [0, max], clamp: true, legend: true, marginLeft: 12, width: 280, label: 'Puissance (W)', tickFormat: (v) => v.toLocaleString('fr-FR') };
 }
 
+const pad = (n) => String(n).padStart(2, '0');
+const hhmm = (min) => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`;
+/** Créneaux de la journée pour un pas donné : [0, 1, …, 1440/step - 1] */
+const slotsFor = (step) => Array.from({ length: 1440 / step }, (_, i) => i);
+/** Étiquette d'axe : affichée toutes les `every` heures seulement */
+const slotLabel = (step, every) => (slot) => ((slot * step) % (every * 60) === 0 ? `${(slot * step) / 60}h` : '');
+const stepOf = (rows) => rows[0]?.step ?? 60;
+
 const tip = {
   format: { x: false, y: false, fx: false, fy: false, fill: false },
 };
 const tipChannels = {
   Jour: (d) => fmtDay(d.date),
-  Heure: (d) => `${d.hour} h – ${d.hour + 1} h`,
+  Heure: (d) => `${hhmm(d.slot * d.step)} – ${hhmm((d.slot + 1) * d.step)}`,
   Puissance: (d) => fmtW(d.raw) + (d.capped ? ' (plafonnée)' : ''),
 };
 
-/** Heatmap « long » : une ligne par jour (plus récent en haut), une colonne par heure. */
+/** Heatmap « long » : une ligne par jour (plus récent en haut), une colonne par créneau (1 h ou 30 min). */
 export function longHeatmap(rows, { cap, width = 720 } = {}) {
+  const step = stepOf(rows);
+  const slots = slotsFor(step);
   const days = [...new Set(rows.map((r) => r.date))].sort().reverse();
   const w = Math.min(width, 760);
   const marginLeft = 104;
-  const cell = Math.max(10, Math.min(28, (w - marginLeft - 10) / 24));
+  const cell = Math.max(slots.length > 24 ? 6 : 10, Math.min(28, (w - marginLeft - 10) / slots.length));
   const rowH = days.length <= 14 ? cell : days.length <= 62 ? Math.min(cell, 16) : 9;
   const ticks = days.length > 62 ? days.filter((d) => d.endsWith('-01') || d.endsWith('-15')) : days;
   return Plot.plot({
-    width: w,
+    width: Math.max(w, marginLeft + 10 + cell * slots.length),
     height: 40 + days.length * rowH,
     marginLeft,
     marginTop: 28,
-    x: { type: 'band', domain: HOURS, axis: 'top', label: null, tickFormat: (h) => (h % 3 === 0 ? `${h}h` : ''), tickSize: 0 },
+    x: { type: 'band', domain: slots, axis: 'top', label: null, tickFormat: slotLabel(step, 3), tickSize: 0 },
     y: { type: 'band', domain: days, label: null, ticks, tickFormat: fmtDay, tickSize: 0 },
     color: colorScale(rows, cap),
-    marks: [Plot.cell(rows, { x: 'hour', y: 'date', fill: 'value', inset: rowH > 12 ? 1 : 0.5, rx: rowH > 12 ? 2 : 1, channels: tipChannels, tip })],
+    marks: [Plot.cell(rows, { x: 'slot', y: 'date', fill: 'value', inset: rowH > 12 && cell > 12 ? 1 : 0.5, rx: rowH > 12 && cell > 12 ? 2 : 1, channels: tipChannels, tip })],
   });
 }
 
-/** Heatmap « par mois » : petits multiples, un mois = jours (x) × heures (y, 0 h en haut). */
+/** Heatmap « par mois » : petits multiples, un mois = jours (x) × créneaux (y, 0 h en haut). */
 export function monthHeatmap(rows, { cap, width = 960 } = {}) {
+  const step = stepOf(rows);
+  const slots = slotsFor(step);
   const months = [...new Set(rows.map((r) => r.month))].sort();
   const cols = width < 560 ? 1 : width < 900 ? 2 : 3;
   const index = new Map(months.map((m, i) => [m, i]));
@@ -60,7 +71,8 @@ export function monthHeatmap(rows, { cap, width = 960 } = {}) {
   const nRows = Math.ceil(months.length / cols);
   const marginLeft = 34;
   const facetW = (width - marginLeft - 10) / cols;
-  const facetH = (facetW * 0.9 * 24) / 31;
+  // au pas de 30 min, cases deux fois plus nombreuses mais moins hautes (facette 1,5 fois plus haute)
+  const facetH = ((facetW * 0.9 * 24) / 31) * (slots.length > 24 ? 1.5 : 1);
   const labels = months.map((m) => ({ month: m }));
 
   return Plot.plot({
@@ -71,10 +83,10 @@ export function monthHeatmap(rows, { cap, width = 960 } = {}) {
     fx: { axis: null, padding: 0.1 },
     fy: { axis: null, padding: 0.28 },
     x: { type: 'band', domain: DAYS31, label: null, tickFormat: (d) => ([1, 10, 20, 31].includes(d) ? d : ''), tickSize: 0 },
-    y: { type: 'band', domain: HOURS, label: null, tickFormat: (h) => (h % 6 === 0 ? `${h}h` : ''), tickSize: 0 },
+    y: { type: 'band', domain: slots, label: null, tickFormat: slotLabel(step, 6), tickSize: 0 },
     color: colorScale(rows, cap),
     marks: [
-      Plot.cell(rows, { x: 'day', y: 'hour', fx, fy, fill: 'value', inset: 0.5, channels: tipChannels, tip }),
+      Plot.cell(rows, { x: 'day', y: 'slot', fx, fy, fill: 'value', inset: slots.length > 24 ? 0.3 : 0.5, channels: tipChannels, tip }),
       Plot.text(labels, { fx, fy, text: (d) => fmtMonth(d.month), frameAnchor: 'top-left', dy: -8, lineAnchor: 'bottom', fontWeight: 600, fontSize: 12 }),
     ],
   });

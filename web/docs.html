@@ -63,7 +63,8 @@
         <tr><td>PRM</td><td>Identifiant à 14 chiffres du compteur.</td></tr>
         <tr><td>Token</td><td>Token personnel fourni par conso.boris.sh.</td></tr>
         <tr><td>Puissance souscrite</td><td>Plafond de l'échelle de couleur (en W ≈ kVA × 1000). Les valeurs supérieures sont affichées à la couleur maximale et signalées « plafonnée » dans l'infobulle. « Automatique » n'applique aucun plafond et cale l'échelle sur le 99<sup>e</sup> centile des valeurs, pour qu'un pic isolé n'écrase pas les contrastes.</td></tr>
-        <tr><td>Agrégation horaire</td><td>Chaque case représente une heure, qui regroupe deux mesures de 30 min. <em>Maximum</em> fait ressortir les pics, <em>Moyenne</em> reflète l'énergie consommée.</td></tr>
+        <tr><td>Pas de temps</td><td>Durée représentée par une case : <strong>1 heure</strong> (24 colonnes par jour, vue d'ensemble) ou <strong>30 minutes</strong> (48 colonnes). 30 minutes est le pas le plus fin, celui de la courbe de charge Linky : chaque case correspond alors à une mesure, sans regroupement.</td></tr>
+        <tr><td>Agrégation par case</td><td>Façon de regrouper les mesures qui tombent dans une même case. Au pas d'1 heure, une case contient deux mesures de 30 min : <em>Maximum</em> fait ressortir les pics, <em>Moyenne</em> reflète l'énergie consommée. Au pas de 30 minutes, une case ne contient qu'une mesure Linky : le choix est alors grisé, faute de mesures à regrouper (sauf si un fichier importé a un pas plus fin, de 10 ou 15 min).</td></tr>
         <tr><td>Nombre de jours / Jusqu'au</td><td>Période demandée : les N jours qui précèdent la date choisie (exclue). Les données de la veille sont disponibles chaque matin.</td></tr>
         <tr><td>Mémoriser</td><td>Enregistre le PRM et le token dans le stockage local de ce navigateur uniquement.</td></tr>
         <tr><td>Paramètres avancés</td><td>URL du relais (voir <a href="#relais">§ 8</a>). Pré-remplie avec le relais officiel : n'y touchez que si vous utilisez votre propre relais.</td></tr>
@@ -80,6 +81,7 @@
             <li><strong>Long</strong> : une ligne par jour, la plus récente en haut.</li>
           </ul>
         </li>
+        <li>Choisissez le pas de temps (1 heure ou 30 minutes) et l'agrégation, comme pour l'onglet API (§ 3). Ils s'appliquent aux deux vues.</li>
       </ol>
       <p>Le bouton « Charger des données d'exemple » génère une année fictive pour tester l'outil sans compte Enedis.</p>
 
@@ -91,7 +93,7 @@
         <li><strong>Mois d'hiver plus foncés</strong> : part du chauffage électrique.</li>
         <li><strong>Cases au plafond</strong> : risque de dépassement de la puissance souscrite (disjonction).</li>
       </ul>
-      <p>Survolez ou touchez une case pour afficher le jour, l'heure et la valeur exacte.</p>
+      <p>Survolez ou touchez une case pour afficher le jour, le créneau (par exemple 13:00 – 13:30) et la valeur exacte. Le pas de 30 minutes permet de distinguer des usages courts, comme un four ou un lave-linge, qu'une moyenne horaire lisse.</p>
 
       <h2 id="limites">6. Limites et bon usage</h2>
       <ul>
@@ -136,7 +138,8 @@
         <tr><td>Qu'est-ce qu'« une même requête » ?</td><td>Même type de données, mêmes paramètres (PRM, date de début, date de fin) et même token. La clé du cache est l'empreinte SHA-256 de ces éléments : changer une seule date, ou utiliser un autre token, donne une autre requête.</td></tr>
         <tr><td>Qu'est-ce qui est mis en cache ?</td><td>Uniquement les réponses réussies (HTTP 200). Une erreur (token invalide, données pas encore publiées…) n'est jamais conservée : vous pouvez réessayer après avoir corrigé le problème.</td></tr>
         <tr><td>Combien de temps ?</td><td>12 heures à partir du premier appel. Passé ce délai, la requête suivante interroge à nouveau conso.boris.sh, et la nouvelle réponse repart pour 12 h.</td></tr>
-        <tr><td>Où ?</td><td>En mémoire vive du relais. Le cache est vidé à chaque redémarrage ou redéploiement.</td></tr>
+        <tr><td>Où ?</td><td>En mémoire vive (RAM) du conteneur Railway, rien sur disque. Le cache est vidé à chaque redémarrage ou redéploiement.</td></tr>
+        <tr><td>Quelle taille au maximum ?</td><td><strong>1 000 réponses</strong> par défaut (<code>CACHE_MAX_ENTRIES</code>). Une semaine de courbe de charge pèse environ 15 Ko, soit environ 15 Mo de mémoire au maximum. Quand le plafond est atteint, les réponses les plus anciennes sont supprimées en premier. Les réponses expirées (plus de 12 h) sont aussi retirées à chaque nouvel ajout. Le plafond protège le relais contre une saturation de la mémoire, par exemple si de nombreuses adresses IP différentes envoyaient des requêtes.</td></tr>
         <tr><td>Comment le savoir ?</td><td>L'application précise « servies par le cache du relais » sous le formulaire. Techniquement, l'en-tête de réponse <code>X-OptiWatt-Cache</code> vaut <code>HIT</code> (cache) ou <code>MISS</code> (appel réel).</td></tr>
       </table>
       <p>Exemple : vous affichez les 7 jours jusqu'au 22/11 à 9 h, puis vous rechargez la page à 15 h et relancez la même demande. La seconde réponse vient du cache, et Enedis n'est pas sollicité.</p>
@@ -158,6 +161,7 @@
         <tr><th>Variable (Railway → Variables)</th><th>Défaut</th><th>Rôle</th></tr>
         <tr><td><code>ALLOWED_ORIGINS</code></td><td><code>https://elmetayer.github.io</code>, <code>http://localhost:5173</code>, <code>http://localhost:4173</code></td><td>Sites autorisés à utiliser le relais, séparés par des virgules (domaine seul, sans chemin ni slash final).</td></tr>
         <tr><td><code>CACHE_HOURS</code></td><td><code>12</code></td><td>Durée de conservation d'une réponse, en heures.</td></tr>
+        <tr><td><code>CACHE_MAX_ENTRIES</code></td><td><code>1000</code></td><td>Nombre maximal de réponses gardées en cache (environ 15 Ko chacune). Les plus anciennes sont supprimées au-delà.</td></tr>
         <tr><td><code>RATE_LIMIT</code></td><td><code>10</code></td><td>Nombre maximal d'appels à conso.boris.sh par IP et par heure glissante.</td></tr>
         <tr><td><code>PORT</code></td><td>fourni par Railway</td><td>Port d'écoute (<code>8787</code> en local).</td></tr>
       </table>

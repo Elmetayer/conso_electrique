@@ -1,5 +1,5 @@
 import './style.css';
-import { aggregateHourly, apiRange, parseEnedisCsv, summarize, toCsv } from './data.js';
+import { aggregate, apiRange, parseEnedisCsv, stepMinutes, summarize, toCsv } from './data.js';
 import { fetchLoadCurve } from './api.js';
 import { exportCsv, exportPng, exportSvg, longHeatmap, monthHeatmap, placeholder } from './charts.js';
 import { demoPoints } from './demo.js';
@@ -64,7 +64,7 @@ function renderKpis(el, s) {
 }
 
 /** Un « panneau » = formulaire + zone de résultat d'un onglet. */
-function makePanel(panelEl, { getOptions, filePrefix }) {
+function makePanel(panelEl, { getOptions, filePrefix, aggEl }) {
   const state = { points: null, chart: null };
   const chartEl = panelEl.querySelector('[data-chart]');
   const kpisEl = panelEl.querySelector('[data-kpis]');
@@ -78,8 +78,12 @@ function makePanel(panelEl, { getOptions, filePrefix }) {
     render() {
       if (panelEl.hidden) return;
       if (!state.points) { chartEl.replaceChildren(placeholder('Aucune donnée à afficher pour le moment.')); return; }
-      const { view, cap, agg } = getOptions();
-      const rows = aggregateHourly(state.points, { agg, cap });
+      const { view, cap, agg, step } = getOptions();
+      // Agrégation sans effet si chaque case ne contient qu'une mesure (ex. pas de 30 min sur une courbe Linky)
+      const single = step <= stepMinutes(state.points);
+      aggEl.disabled = single;
+      aggEl.title = single ? 'Une seule mesure par case à ce pas de temps : rien à agréger' : '';
+      const rows = aggregate(state.points, { agg, cap, step });
       const width = chartEl.clientWidth || 720;
       state.chart = view === 'month' ? monthHeatmap(rows, { cap, width }) : longHeatmap(rows, { cap, width });
       chartEl.replaceChildren(state.chart);
@@ -102,7 +106,8 @@ function makePanel(panelEl, { getOptions, filePrefix }) {
 const apiForm = document.getElementById('api-form');
 const apiPanel = makePanel(document.getElementById('panel-api'), {
   filePrefix: 'optiwatt-courbe',
-  getOptions: () => ({ view: 'long', cap: +apiForm.cap.value, agg: apiForm.agg.value }),
+  aggEl: apiForm.agg,
+  getOptions: () => ({ view: 'long', cap: +apiForm.cap.value, agg: apiForm.agg.value, step: +apiForm.step.value }),
 });
 
 (function initApiForm() {
@@ -120,7 +125,7 @@ const apiPanel = makePanel(document.getElementById('panel-api'), {
   apiForm.querySelector('[data-toggle-token]').addEventListener('click', () => {
     apiForm.token.type = apiForm.token.type === 'password' ? 'text' : 'password';
   });
-  for (const name of ['cap', 'agg']) apiForm[name].addEventListener('change', () => apiPanel.render());
+  for (const name of ['cap', 'agg', 'step']) apiForm[name].addEventListener('change', () => apiPanel.render());
 })();
 
 apiForm.addEventListener('submit', async (e) => {
@@ -162,10 +167,11 @@ apiForm.addEventListener('submit', async (e) => {
 const csvForm = document.getElementById('csv-form');
 const csvPanel = makePanel(document.getElementById('panel-csv'), {
   filePrefix: 'optiwatt-enedis',
-  getOptions: () => ({ view: csvForm.view.value, cap: +csvForm.cap.value, agg: csvForm.agg.value }),
+  aggEl: csvForm.agg,
+  getOptions: () => ({ view: csvForm.view.value, cap: +csvForm.cap.value, agg: csvForm.agg.value, step: +csvForm.step.value }),
 });
 csvForm.cap.value = '0';
-for (const name of ['view', 'cap', 'agg']) csvForm[name].addEventListener('change', () => csvPanel.render());
+for (const name of ['view', 'cap', 'agg', 'step']) csvForm[name].addEventListener('change', () => csvPanel.render());
 
 csvForm.file.addEventListener('change', async () => {
   const file = csvForm.file.files[0];

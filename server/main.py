@@ -7,7 +7,8 @@ l'absence d'en-têtes CORS, tout en restant « bon citoyen » vis-à-vis du serv
 - CORS limité aux origines de ALLOWED_ORIGINS ;
 - User-Agent identifiant OptiWatt, comme le demande conso.boris.sh ;
 - cache mémoire : une même requête (type + paramètres + token) n'est envoyée
-  qu'une fois toutes les CACHE_HOURS heures ;
+  qu'une fois toutes les CACHE_HOURS heures ; au plus CACHE_MAX_ENTRIES entrées,
+  les plus anciennes étant supprimées en premier ;
 - limite de RATE_LIMIT requêtes amont par heure et par IP cliente ;
 - une page de blocage (HTML Cloudflare) est convertie en erreur JSON explicite.
 
@@ -23,6 +24,7 @@ import os
 import re
 import threading
 import time
+from collections import OrderedDict
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,6 +35,7 @@ ALLOWED_ORIGINS = {o.strip() for o in os.environ.get(
     "ALLOWED_ORIGINS", "https://elmetayer.github.io,http://localhost:5173,http://localhost:4173").split(",") if o.strip()}
 USER_AGENT = os.environ.get("USER_AGENT", "OptiWatt-relay/0.1 (+https://github.com/Elmetayer/conso_electrique)")
 CACHE_HOURS = float(os.environ.get("CACHE_HOURS", "12"))
+CACHE_MAX_ENTRIES = int(os.environ.get("CACHE_MAX_ENTRIES", "1000"))  # ~15 Ko/entrée -> ~15 Mo
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "10"))
 TYPES = {
     "index_consommation", "index_production", "consommation_quotidienne", "production_quotidienne",
@@ -40,13 +43,27 @@ TYPES = {
 }
 PATH_RE = re.compile(r"^/api/([a-z_]+)$")
 
-_cache: dict[str, tuple[float, int, bytes]] = {}
+_cache: OrderedDict[str, tuple[float, int, bytes]] = OrderedDict()  # ordre d'insertion = du plus ancien au plus récent
 _hits: dict[str, list[float]] = {}
 _lock = threading.Lock()
 
 
 def cache_key(api_type: str, query: str, auth: str) -> str:
     return hashlib.sha256(f"{api_type}?{query}|{auth}".encode()).hexdigest()
+
+
+def cache_store(key: str, status: int, body: bytes, now: float) -> None:
+    """Ajoute une réponse, purge les entrées expirées puis applique le plafond."""
+    ttl = CACHE_HOURS * 3600
+    with _lock:
+        _cache.pop(key, None)
+        _cache[key] = (now, status, body)
+        while _cache:  # les plus anciennes sont en tête
+            oldest_key, (ts, _, _) = next(iter(_cache.items()))
+            if now - ts >= ttl or len(_cache) > CACHE_MAX_ENTRIES:
+                del _cache[oldest_key]
+            else:
+                break
 
 
 def allow_request(client: str, now: float | None = None) -> bool:
@@ -152,10 +169,7 @@ class Handler(BaseHTTPRequestHandler):
 
         status, body = fetch_upstream(m.group(1), url.query, auth)
         if status == 200:
-            with _lock:
-                _cache[key] = (now, status, body)
-                for k in [k for k, v in _cache.items() if now - v[0] >= CACHE_HOURS * 3600]:
-                    del _cache[k]
+            cache_store(key, status, body, now)
         self._send(status, body, cors, cache="MISS")
 
 

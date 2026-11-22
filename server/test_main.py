@@ -72,6 +72,16 @@ def test_relai_puis_cache(server):
     assert len(calls) == 1 and calls[0][0] == "courbe_de_charge_consommation" and calls[0][2] == "Bearer abc"
 
 
+def test_cache_plafonne_et_expiration(monkeypatch):
+    main._cache.clear()
+    monkeypatch.setattr(main, "CACHE_MAX_ENTRIES", 3)
+    for i in range(5):
+        main.cache_store(f"k{i}", 200, b"{}", 1000 + i)
+    assert list(main._cache) == ["k2", "k3", "k4"]  # les plus anciennes supprimées
+    main.cache_store("k5", 200, b"{}", 1000 + main.CACHE_HOURS * 3600 + 3)
+    assert list(main._cache) == ["k4", "k5"]  # k2 et k3 expirées
+
+
 def test_limite_par_ip(monkeypatch):
     main._hits.clear()
     monkeypatch.setattr(main, "RATE_LIMIT", 2)

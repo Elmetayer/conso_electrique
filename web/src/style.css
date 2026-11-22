@@ -107,3 +107,4 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .doc th, .doc td { border-bottom: 1px solid var(--line); padding: 0.45rem 0.5rem; text-align: left; vertical-align: top; }
 .callout { border-left: 3px solid var(--accent); background: var(--surface); padding: 0.7rem 1rem; border-radius: 0 8px 8px 0; }
 @media (max-width: 760px) { .doc { grid-template-columns: 1fr; } .doc nav.toc { position: static; } }
+select:disabled { opacity: 0.55; cursor: not-allowed; }

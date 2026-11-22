@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateHourly, apiRange, parseApiResponse, parseEnedisCsv, parseTimestamp, summarize, toCsv } from './data.js';
+import { aggregate, aggregateHourly, apiRange, parseApiResponse, parseEnedisCsv, parseTimestamp, summarize, toCsv } from './data.js';
 
 const CSV = `Identifiant PRM;Type de donnees;Date de debut;Date de fin;Grandeur physique;Grandeur metier;Etape metier;Unite;Pas en minutes
 12345678901234;Courbe de charge;01/04/2026;02/04/2026;Energie active;Consommation;Comptage Brut;W;
@@ -45,6 +45,21 @@ describe('aggregateHourly', () => {
   it('gère le passage de minuit', () => {
     const rows = aggregateHourly([{ t: parseTimestamp('2026-04-02 00:00'), v: 1 }]);
     expect(rows[0]).toMatchObject({ date: '2026-04-01', hour: 23, month: '2026-04', day: 1 });
+  });
+});
+
+describe('aggregate au pas de 30 min', () => {
+  const pts = parseEnedisCsv(CSV);
+  it('garde une case par mesure Linky', () => {
+    const rows = aggregate(pts, { step: 30 });
+    expect(rows.map((r) => [r.slot, r.hour, r.minute, r.value])).toEqual([
+      [0, 0, 0, 400], [1, 0, 30, 600], [2, 1, 0, 13000], [3, 1, 30, 1000],
+    ]);
+  });
+  it('regroupe les pas plus fins (15 min) par moyenne ou maximum', () => {
+    const fine = ['00:15', '00:30', '00:45', '01:00'].map((h, i) => ({ t: parseTimestamp(`2026-04-01 ${h}`), v: (i + 1) * 100 }));
+    expect(aggregate(fine, { step: 30 }).map((r) => r.value)).toEqual([150, 350]);
+    expect(aggregate(fine, { step: 30, agg: 'max' }).map((r) => r.value)).toEqual([200, 400]);
   });
 });
 

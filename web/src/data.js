@@ -70,37 +70,48 @@ const pad = (n) => String(n).padStart(2, '0');
 export const isoDay = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 
 /**
- * Agrège les mesures par jour et par heure.
+ * Agrège les mesures par jour et par créneau de `step` minutes (30 = pas le plus fin
+ * d'une courbe de charge Linky, 60 = une case par heure).
  * @param {{t: Date, v: number}[]} points
- * @param {{agg?: 'mean'|'max', cap?: number}} opts cap = plafond en W (puissance souscrite), 0/undefined = aucun
- * @returns {{date: string, month: string, day: number, hour: number, value: number, raw: number, capped: boolean}[]}
+ * @param {{agg?: 'mean'|'max', cap?: number, step?: 30|60}} opts cap = plafond en W (puissance souscrite), 0/undefined = aucun
+ * @returns {{date: string, month: string, day: number, slot: number, hour: number, minute: number, step: number,
+ *            value: number, raw: number, capped: boolean}[]}
+ *   slot = index du créneau dans la journée (0 à 1440/step - 1)
  */
-export function aggregateHourly(points, { agg = 'mean', cap } = {}) {
+export function aggregate(points, { agg = 'mean', cap, step = 60 } = {}) {
   const groups = new Map();
   for (const { t, v } of points) {
     const s = new Date(t.getTime() - 60_000); // début d'intervalle
-    const key = `${isoDay(s)}|${s.getUTCHours()}`;
+    const slot = Math.floor((s.getUTCHours() * 60 + s.getUTCMinutes()) / step);
+    const key = `${isoDay(s)}|${slot}`;
     const g = groups.get(key);
     if (g) { g.sum += v; g.n += 1; g.max = Math.max(g.max, v); }
     else groups.set(key, { sum: v, n: 1, max: v });
   }
   const rows = [];
   for (const [key, g] of groups) {
-    const [date, h] = key.split('|');
+    const [date, sl] = key.split('|');
+    const slot = +sl;
     const raw = agg === 'max' ? g.max : g.sum / g.n;
     const capped = cap > 0 && raw > cap;
     rows.push({
       date,
       month: date.slice(0, 7),
       day: +date.slice(8, 10),
-      hour: +h,
+      slot,
+      hour: Math.floor((slot * step) / 60),
+      minute: (slot * step) % 60,
+      step,
       raw,
       value: capped ? cap : raw,
       capped,
     });
   }
-  return rows.sort((a, b) => (a.date === b.date ? a.hour - b.hour : a.date < b.date ? -1 : 1));
+  return rows.sort((a, b) => (a.date === b.date ? a.slot - b.slot : a.date < b.date ? -1 : 1));
 }
+
+/** Agrégation par heure (compatibilité). */
+export const aggregateHourly = (points, opts = {}) => aggregate(points, { ...opts, step: 60 });
 
 /** Pas de mesure médian, en minutes (30 pour une courbe de charge Linky). */
 export function stepMinutes(points) {
