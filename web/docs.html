@@ -139,7 +139,7 @@ wrangler deploy                # affiche l'URL https://optiwatt-proxy.&lt;compte
         <li>Déployez le proxy (§ 8) et ajoutez l'URL de votre site (<code>https://&lt;user&gt;.github.io</code>) dans <code>ALLOWED_ORIGINS</code> (<code>proxy/wrangler.toml</code>).</li>
         <li>Dans <em>Settings → Secrets and variables → Actions → Variables</em>, créez la variable <code>VITE_PROXY_URL</code> avec l'URL du proxy.</li>
         <li>Dans <em>Settings → Pages</em>, choisissez « Source : GitHub Actions ».</li>
-        <li>Chaque push sur <code>main</code> déclenche le workflow <code>.github/workflows/deploy.yml</code>, qui lance les tests, construit le site et le publie sur <code>https://&lt;user&gt;.github.io/&lt;repo&gt;/</code>.</li>
+        <li>Chaque push sur <code>master</code> déclenche le workflow <code>.github/workflows/deploy.yml</code>, qui lance les tests, construit le site et le publie sur <code>https://&lt;user&gt;.github.io/&lt;repo&gt;/</code>.</li>
       </ol>
 
       <h2 id="python">10. Outil Python (CLI)</h2>
