@@ -50,6 +50,13 @@
             <option value="30">30 minutes (le plus fin)</option>
           </select>
         </label>
+        <label>Grandeur affichée
+          <select name="metric">
+            <option value="power" selected>Puissance (W)</option>
+            <option value="price">Prix de gros day-ahead (€/MWh)</option>
+            <option value="cost">Coût au prix de gros (€)</option>
+          </select>
+        </label>
         <label>Nombre de jours : <output name="daysOut">7</output>
           <input name="days" type="range" min="1" max="7" value="7" />
         </label>
@@ -72,6 +79,13 @@
       <div class="card result">
         <div class="kpis" data-kpis></div>
         <div class="chart" data-chart></div>
+        <div class="market" data-market hidden>
+          <p class="market-note" data-market-note></p>
+          <h3>Profil journalier moyen</h3>
+          <div class="chart" data-profile></div>
+          <h3>Coût au prix de gros, par jour</h3>
+          <div class="chart" data-daily></div>
+        </div>
         <div class="exports" data-exports hidden>
           <button type="button" data-export="png">PNG</button>
           <button type="button" data-export="svg">SVG</button>
@@ -110,6 +124,13 @@
             <option value="30">30 minutes (le plus fin)</option>
           </select>
         </label>
+        <label>Grandeur affichée
+          <select name="metric">
+            <option value="power" selected>Puissance (W)</option>
+            <option value="price">Prix de gros day-ahead (€/MWh)</option>
+            <option value="cost">Coût au prix de gros (€)</option>
+          </select>
+        </label>
         <div class="actions">
           <button type="button" class="ghost" data-demo>Charger des données d'exemple</button>
         </div>
@@ -118,6 +139,13 @@
       <div class="card result">
         <div class="kpis" data-kpis></div>
         <div class="chart" data-chart></div>
+        <div class="market" data-market hidden>
+          <p class="market-note" data-market-note></p>
+          <h3>Profil journalier moyen</h3>
+          <div class="chart" data-profile></div>
+          <h3>Coût au prix de gros, par jour</h3>
+          <div class="chart" data-daily></div>
+        </div>
         <div class="exports" data-exports hidden>
           <button type="button" data-export="png">PNG</button>
           <button type="button" data-export="svg">SVG</button>
@@ -128,7 +156,7 @@
   </main>
 
   <footer class="footer">
-    Données : <a href="https://conso.boris.sh" rel="noopener">Conso API</a> / Enedis. Vos données restent dans votre navigateur.
+    Données : <a href="https://conso.boris.sh" rel="noopener">Conso API</a> / Enedis ; prix day-ahead : <a href="https://transparency.entsoe.eu" rel="noopener">ENTSO-E Transparency Platform</a>. Vos données restent dans votre navigateur.
   </footer>
   <script type="module" src="/src/main.js"></script>
 </body>

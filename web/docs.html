@@ -24,6 +24,7 @@
         <li><a href="#api">Onglet « Ma consommation »</a></li>
         <li><a href="#csv">Onglet « Import d'un fichier »</a></li>
         <li><a href="#lecture">Lire les heatmaps</a></li>
+        <li><a href="#marche">Prix de gros</a></li>
         <li><a href="#limites">Limites et bon usage</a></li>
         <li><a href="#confidentialite">Confidentialité</a></li>
         <li><a href="#relais">Le relais Python</a></li>
@@ -67,7 +68,7 @@
         <tr><td>Agrégation par case</td><td>Façon de regrouper les mesures qui tombent dans une même case. Au pas d'1 heure, une case contient deux mesures de 30 min : <em>Maximum</em> fait ressortir les pics, <em>Moyenne</em> reflète l'énergie consommée. Au pas de 30 minutes, une case ne contient qu'une mesure Linky : le choix est alors grisé, faute de mesures à regrouper (sauf si un fichier importé a un pas plus fin, de 10 ou 15 min).</td></tr>
         <tr><td>Nombre de jours / Jusqu'au</td><td>Période demandée : les N jours qui précèdent la date choisie (exclue). Les données de la veille sont disponibles chaque matin.</td></tr>
         <tr><td>Mémoriser</td><td>Enregistre le PRM et le token dans le stockage local de ce navigateur uniquement.</td></tr>
-        <tr><td>Paramètres avancés</td><td>URL du relais (voir <a href="#relais">§ 8</a>). Pré-remplie avec le relais officiel : n'y touchez que si vous utilisez votre propre relais.</td></tr>
+        <tr><td>Paramètres avancés</td><td>URL du relais (voir <a href="#relais">§ 9</a>). Pré-remplie avec le relais officiel : n'y touchez que si vous utilisez votre propre relais.</td></tr>
       </table>
       <p>Le résultat affiche trois indicateurs (période, énergie consommée, pic de puissance) et la heatmap. Les boutons <strong>PNG</strong>, <strong>SVG</strong> et <strong>Données CSV</strong> permettent d'exporter le graphique ou les mesures brutes, au même format que l'espace client Enedis : le fichier est donc réimportable dans l'onglet « Import ».</p>
 
@@ -95,15 +96,36 @@
       </ul>
       <p>Survolez ou touchez une case pour afficher le jour, le créneau (par exemple 13:00 – 13:30) et la valeur exacte. Le pas de 30 minutes permet de distinguer des usages courts, comme un four ou un lave-linge, qu'une moyenne horaire lisse.</p>
 
-      <h2 id="limites">6. Limites et bon usage</h2>
+      <h2 id="marche">6. Valoriser sa consommation au prix de gros</h2>
+      <p>Le menu <strong>Grandeur affichée</strong> (dans les deux onglets) colore la heatmap selon :</p>
+      <ul>
+        <li><strong>Puissance (W)</strong> : l'affichage habituel ;</li>
+        <li><strong>Prix de gros day-ahead (€/MWh)</strong> : le prix de l'électricité fixé la veille sur le marché européen pour la France ;</li>
+        <li><strong>Coût au prix de gros (€)</strong> : énergie consommée × prix, c'est-à-dire ce qu'aurait coûté chaque créneau si vous achetiez votre énergie directement sur le marché.</li>
+      </ul>
+      <p>Pour le prix et le coût, l'échelle est centrée sur 0 : rouge pour les valeurs positives, <strong>bleu pour les prix négatifs</strong> (fréquents les week-ends ensoleillés). Sous la heatmap, deux graphiques s'ajoutent : le profil journalier moyen (puissance au-dessus, prix en dessous, sur le même axe horaire) et le coût par jour.</p>
+      <table>
+        <tr><th>Indicateur</th><th>Calcul</th><th>Lecture</th></tr>
+        <tr><td>Valorisation au prix de gros</td><td>Σ (énergie de chaque mesure × prix de la période)</td><td>Coût de l'énergie seule : sans acheminement (TURPE), taxes ni marge du fournisseur. Ce n'est pas votre facture.</td></tr>
+        <tr><td>Prix capté</td><td>Valorisation ÷ énergie consommée</td><td>Prix moyen de <em>votre</em> MWh, pondéré par votre consommation.</td></tr>
+        <tr><td>Facteur de forme</td><td>Prix capté ÷ prix moyen du marché sur la même période</td><td>Au-dessus de 1, vous consommez plutôt aux heures chères ; en dessous, aux heures bon marché.</td></tr>
+      </table>
+      <h3>Source et calcul</h3>
+      <ul>
+        <li>Les prix viennent de la <a href="https://transparency.entsoe.eu" rel="noopener">plateforme de transparence ENTSO-E</a> (zone France), via le relais (voir <a href="#relais">§ 9</a>). Ils sont au pas de 15 minutes depuis octobre 2025, horaires avant.</li>
+        <li>Une mesure Linky de 30 minutes reçoit la moyenne des deux quarts d'heure qu'elle couvre. Une mesure sans prix (jour pas encore publié, trou de données) est ignorée dans les calculs ; l'application indique alors la part des mesures valorisées.</li>
+        <li>Les données d'exemple utilisent des prix fictifs.</li>
+      </ul>
+
+      <h2 id="limites">7. Limites et bon usage</h2>
       <ul>
         <li>Les quotas Enedis (5 requêtes/s, 10 000 requêtes/h) sont partagés par <em>tous</em> les utilisateurs de Conso API. Les abus entraînent un blocage d'IP automatique, potentiellement définitif.</li>
-        <li>Enedis ne met à jour les données qu'<strong>une fois par jour</strong> : une requête quotidienne suffit. OptiWatt évite les appels inutiles à deux niveaux : un cache dans votre navigateur et un cache sur le relais (voir <a href="#relais">§ 8</a>).</li>
+        <li>Enedis ne met à jour les données qu'<strong>une fois par jour</strong> : une requête quotidienne suffit. OptiWatt évite les appels inutiles à deux niveaux : un cache dans votre navigateur et un cache sur le relais (voir <a href="#relais">§ 9</a>).</li>
         <li>La courbe de charge est limitée à <strong>7 jours par requête</strong>. Pour un historique plus long, utilisez l'import CSV ou l'outil Python, qui découpe automatiquement la période.</li>
         <li>Le plafond « kVA × 1000 » est une approximation : la puissance souscrite est apparente (VA), alors que la courbe de charge mesure une puissance active (W).</li>
       </ul>
 
-      <h2 id="confidentialite">7. Confidentialité</h2>
+      <h2 id="confidentialite">8. Confidentialité</h2>
       <ul>
         <li>Les graphiques sont calculés dans votre navigateur. Les fichiers CSV importés ne quittent pas votre appareil.</li>
         <li>Lors d'un appel à l'API, le PRM et le token transitent par le relais jusqu'à conso.boris.sh. Le relais :
@@ -116,7 +138,7 @@
         <li>Si vous cochez « Mémoriser », le token est conservé en clair dans le stockage local de votre navigateur. Ne l'activez pas sur un appareil partagé.</li>
       </ul>
 
-      <h2 id="relais">8. Le relais Python</h2>
+      <h2 id="relais">9. Le relais Python</h2>
       <h3>Pourquoi un relais ?</h3>
       <p>Un navigateur n'autorise une page à lire la réponse d'un autre domaine que si ce domaine l'accepte explicitement (en-têtes CORS). conso.boris.sh n'envoie pas ces en-têtes, et une page hébergée sur <code>github.io</code> ne peut donc pas l'appeler directement. Le relais fait l'appel à sa place, côté serveur, et renvoie la réponse avec les bons en-têtes.</p>
       <p class="callout">Un premier relais hébergé sur Cloudflare Workers a été abandonné en novembre 2026 : conso.boris.sh bloque les adresses IP partagées de Cloudflare (page « Attention Required »). Le relais actuel tourne sur Railway, dont l'IP sortante est acceptée.</p>
@@ -156,6 +178,11 @@
         <tr><td>Est-ce suffisant ?</td><td>Oui pour un usage normal. Afficher sa semaine prend 1 appel, et même en testant plusieurs périodes et plusieurs compteurs, on reste loin de 10 par heure.</td></tr>
       </table>
 
+      <h3>Prix de gros (ENTSO-E)</h3>
+      <p>Le relais sert aussi <code>GET /api/prix_day_ahead?debut=AAAA-MM-JJ&amp;fin=AAAA-MM-JJ</code> (fin exclue, 3 ans maximum). Il interroge ENTSO-E avec un token gardé côté serveur, découpe la demande par mois civil et met chaque mois en cache : <strong>30 jours</strong> pour un mois terminé (les prix publiés ne changent plus), <strong>1 heure</strong> pour le mois en cours. Aucun PRM ni token Linky n'est transmis pour cette route. Les mois réellement demandés à ENTSO-E sont limités à <code>MARKET_RATE_LIMIT</code> par heure et par IP.</p>
+      <p>La réponse contient des couples <code>[heure de Paris de début du quart d'heure, prix en €/MWh]</code>. Sans token configuré, la route répond <code>503</code> et l'application affiche les heatmaps de puissance comme avant.</p>
+      <p class="callout">Obtenir un token ENTSO-E : créer un compte sur <a href="https://transparency.entsoe.eu" rel="noopener">transparency.entsoe.eu</a>, écrire à <code>transparency@entsoe.eu</code> avec l'objet « Restful API access » en indiquant l'e-mail du compte, puis générer le token dans <em>My Account Settings</em> une fois l'accès accordé.</p>
+
       <h3>Réglages</h3>
       <table>
         <tr><th>Variable (Railway → Variables)</th><th>Défaut</th><th>Rôle</th></tr>
@@ -163,6 +190,8 @@
         <tr><td><code>CACHE_HOURS</code></td><td><code>12</code></td><td>Durée de conservation d'une réponse, en heures.</td></tr>
         <tr><td><code>CACHE_MAX_ENTRIES</code></td><td><code>1000</code></td><td>Nombre maximal de réponses gardées en cache (environ 15 Ko chacune). Les plus anciennes sont supprimées au-delà.</td></tr>
         <tr><td><code>RATE_LIMIT</code></td><td><code>10</code></td><td>Nombre maximal d'appels à conso.boris.sh par IP et par heure glissante.</td></tr>
+        <tr><td><code>ENTSOE_TOKEN</code></td><td>(vide)</td><td>Token de l'API ENTSO-E. Active les prix de gros. À garder secret : ne le mettez que dans les variables Railway.</td></tr>
+        <tr><td><code>MARKET_RATE_LIMIT</code></td><td><code>60</code></td><td>Nombre maximal de mois de prix demandés à ENTSO-E par IP et par heure glissante (les mois en cache ne comptent pas).</td></tr>
         <tr><td><code>PORT</code></td><td>fourni par Railway</td><td>Port d'écoute (<code>8787</code> en local).</td></tr>
       </table>
       <p>Le relais expose aussi <code>/healthz</code>, qui répond <code>OptiWatt relay OK</code>. Railway s'en sert pour vérifier que le service tourne.</p>
@@ -170,7 +199,7 @@
       <h3>Limite connue</h3>
       <p>Le cache et la limite réduisent fortement le risque, mais toutes les requêtes partent toujours de la même IP. Si OptiWatt devenait très utilisé, le volume cumulé pourrait être jugé excessif par conso.boris.sh. La parade serait que chacun lance le relais sur sa propre machine (<code>python server/main.py</code>, puis <code>http://localhost:8787</code> comme URL du relais), pour que les appels partent de sa propre connexion.</p>
 
-      <h2 id="deploiement">9. Déployer sa propre instance</h2>
+      <h2 id="deploiement">10. Déployer sa propre instance</h2>
       <h3>Le site (GitHub Pages)</h3>
       <ol>
         <li>Forkez le dépôt GitHub.</li>
@@ -191,7 +220,7 @@
         <li>Relancez le workflow (<em>Actions → Run workflow</em>) : l'URL est intégrée au site à la construction, et le champ « URL du relais » sera pré-rempli pour tous les visiteurs.</li>
       </ol>
 
-      <h2 id="python">10. Outil Python (CLI)</h2>
+      <h2 id="python">11. Outil Python (CLI)</h2>
       <p>Le dossier <code>python/</code> fournit le paquet <code>optiwatt</code>. Exécuté hors navigateur, il n'est pas concerné par le CORS : il récupère la courbe de charge sur une période longue, en la découpant en tranches de 7 jours espacées dans le temps, et produit un CSV directement importable dans l'application.</p>
       <pre><code>cd python
 pip install -e .
@@ -199,7 +228,7 @@ export CONSO_TOKEN="xxx.yyy.zzz"
 optiwatt fetch --prm 12345678901234 --start 2026-10-01 --end 2026-11-01 -o octobre.csv
 optiwatt summary octobre.csv    # indicateurs dans le terminal</code></pre>
 
-      <h2 id="dev">11. Développement</h2>
+      <h2 id="dev">12. Développement</h2>
       <table>
         <tr><th>Dossier</th><th>Contenu</th></tr>
         <tr><td><code>web/</code></td><td>Application (HTML/CSS/JS, <a href="https://vite.dev">Vite</a>, <a href="https://observablehq.com/plot/">Observable Plot</a>). <code>src/data.js</code> contient le parsing et l'agrégation, testés avec Vitest.</td></tr>
@@ -213,16 +242,16 @@ npm run dev       # http://localhost:5173  (?demo pour charger l'exemple)
 npm test
 npm run build     # sortie dans web/dist</code></pre>
 
-      <h2 id="faq">12. FAQ / dépannage</h2>
+      <h2 id="faq">13. FAQ / dépannage</h2>
       <dl>
         <dt><strong>« Token invalide ou sans accès à ce PRM »</strong></dt>
         <dd>Le token a expiré ou correspond à un autre compteur : refaites le consentement sur conso.boris.sh.</dd>
         <dt><strong>« L'appel direct est bloqué (CORS) »</strong></dt>
         <dd>Le champ « URL du relais » est vide : renseignez-le dans les paramètres avancés.</dd>
         <dt><strong>« Limite de 10 requêtes par heure atteinte »</strong></dt>
-        <dd>Votre connexion a déclenché 10 appels réels dans l'heure (voir <a href="#relais">§ 8</a>). Patientez : chaque appel cesse de compter une heure après avoir été fait.</dd>
+        <dd>Votre connexion a déclenché 10 appels réels dans l'heure (voir <a href="#relais">§ 9</a>). Patientez : chaque appel cesse de compter une heure après avoir été fait.</dd>
         <dt><strong>« Requête bloquée par le pare-feu de conso.boris.sh »</strong></dt>
-        <dd>conso.boris.sh refuse l'IP du relais. Ce n'est pas un problème de token. Il est inutile d'insister : utilisez l'import CSV, ou lancez le relais sur votre machine (§ 8, « Limite connue »).</dd>
+        <dd>conso.boris.sh refuse l'IP du relais. Ce n'est pas un problème de token. Il est inutile d'insister : utilisez l'import CSV, ou lancez le relais sur votre machine (§ 9, « Limite connue »).</dd>
         <dt><strong>« Le relais est injoignable »</strong></dt>
         <dd>Vérifiez l'URL, ou ouvrez <code>…/healthz</code> : le service Railway est peut-être en cours de redéploiement.</dd>
         <dt><strong>« Aucune donnée sur cette période »</strong></dt>
