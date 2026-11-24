@@ -1,12 +1,15 @@
 import './style.css';
 import { aggregate, apiRange, parseEnedisCsv, stepMinutes, summarize, toCsv } from './data.js';
 import { fetchLoadCurve } from './api.js';
-import { exportCsv, exportPng, exportSvg, longHeatmap, monthHeatmap, placeholder } from './charts.js';
+import { dailyCostChart, exportCsv, exportPng, exportSvg, longHeatmap, monthHeatmap, placeholder, profileChart } from './charts.js';
 import { demoPoints } from './demo.js';
+import { attachPrices, demoPrices, fetchDayAhead, priceRange, summarizeMarket } from './prices.js';
 
 const CAP_OPTIONS = [3, 6, 9, 12, 15, 18, 24, 30, 36];
 const STORE_KEY = 'optiwatt.settings';
 const ENV_PROXY = import.meta.env.VITE_PROXY_URL ?? '';
+/** URL du relais (paramètres avancés de l'onglet API, sinon celle de la configuration du site). */
+const relayUrl = () => document.getElementById('api-form')?.proxy.value.trim() || ENV_PROXY;
 
 // ---------- Stockage local (protégé : peut être indisponible) ----------
 const store = {
@@ -43,7 +46,7 @@ for (const sel of document.querySelectorAll('[data-cap]')) {
 
 const fmt = (n, d = 0) => n.toLocaleString('fr-FR', { maximumFractionDigits: d, minimumFractionDigits: d });
 
-function renderKpis(el, s) {
+function renderKpis(el, s, m) {
   if (!s) { el.replaceChildren(); return; }
   const at = s.peakAt;
   const peakWhen = `${String(at.getUTCDate()).padStart(2, '0')}/${String(at.getUTCMonth() + 1).padStart(2, '0')} à ${String(at.getUTCHours()).padStart(2, '0')}h${String(at.getUTCMinutes()).padStart(2, '0')}`;
@@ -52,6 +55,13 @@ function renderKpis(el, s) {
     ['Énergie consommée', `${fmt(s.energyKWh, s.energyKWh < 100 ? 1 : 0)} kWh`, `soit ${fmt(s.avgKWhPerDay, 1)} kWh/jour`],
     ['Pic de puissance', `${fmt(s.peakW)} W`, `le ${peakWhen}`],
   ];
+  if (m) {
+    tiles.push(
+      ['Valorisation au prix de gros', `${fmt(m.cost, 2)} €`, 'Σ énergie × prix day-ahead (hors réseau et taxes)'],
+      ['Prix capté', `${fmt(m.captured)} €/MWh`, `prix moyen du marché : ${fmt(m.market)} €/MWh`],
+      ['Facteur de forme', `× ${fmt(m.shape, 2)}`, m.shape > 1 ? 'tu consommes plutôt quand c’est cher' : 'tu consommes plutôt quand c’est bon marché'],
+    );
+  }
   el.replaceChildren(...tiles.map(([label, value, sub]) => {
     const div = document.createElement('div');
     div.className = 'kpi';
@@ -64,30 +74,97 @@ function renderKpis(el, s) {
 }
 
 /** Un « panneau » = formulaire + zone de résultat d'un onglet. */
-function makePanel(panelEl, { getOptions, filePrefix, aggEl }) {
-  const state = { points: null, chart: null };
+function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
+  const state = { points: null, chart: null, priced: null, priceError: '', demo: false, loadId: 0 };
   const chartEl = panelEl.querySelector('[data-chart]');
   const kpisEl = panelEl.querySelector('[data-kpis]');
   const exportsEl = panelEl.querySelector('[data-exports]');
   const statusEl = panelEl.querySelector('[data-status]');
+  const marketEl = panelEl.querySelector('[data-market]');
+  const marketNoteEl = panelEl.querySelector('[data-market-note]');
+  const profileEl = panelEl.querySelector('[data-profile]');
+  const dailyEl = panelEl.querySelector('[data-daily]');
+
+  /** Charge les prix couvrant les mesures (fictifs pour les données d'exemple), puis redessine. */
+  async function loadPrices() {
+    const id = ++state.loadId;
+    const points = state.points;
+    let prices;
+    try {
+      if (state.demo) prices = demoPrices(points);
+      else {
+        const { debut, fin } = priceRange(points);
+        const key = `optiwatt.prix|${debut}|${fin}`;
+        const cached = cache.get(key);
+        if (cached) prices = new Map(cached);
+        else {
+          prices = await fetchDayAhead({ baseUrl: relayUrl(), debut, fin });
+          cache.set(key, [...prices]);
+        }
+      }
+      if (id !== state.loadId) return;
+      state.priced = attachPrices(points, prices);
+    } catch (err) {
+      if (id !== state.loadId) return;
+      state.priceError = err.message;
+    }
+    panel.render();
+  }
+
+  function renderMarket(step, width) {
+    const m = state.priced && summarizeMarket(state.priced);
+    if (!m) {
+      marketEl.hidden = !state.priceError;
+      marketNoteEl.textContent = state.priceError;
+      marketNoteEl.dataset.kind = 'error';
+      profileEl.replaceChildren();
+      dailyEl.replaceChildren();
+      return null;
+    }
+    marketEl.hidden = false;
+    marketNoteEl.dataset.kind = '';
+    marketNoteEl.textContent = (state.demo ? 'Prix fictifs (données d’exemple).' : 'Prix day-ahead France, source ENTSO-E (pas de 15 min, moyennés sur chaque mesure).') +
+      (m.coverage < 0.999 ? ` Prix disponibles pour ${fmt(m.coverage * 100)} % des mesures.` : '');
+    profileEl.replaceChildren(profileChart(
+      aggregate(state.priced, { step, metric: 'power', agg: 'mean' }),
+      aggregate(state.priced, { step, metric: 'price' }),
+      { width },
+    ));
+    dailyEl.replaceChildren(dailyCostChart(aggregate(state.priced, { step: 60, metric: 'cost' }), { width }));
+    return m;
+  }
 
   const panel = {
     state,
     status(msg, kind = '') { statusEl.textContent = msg; statusEl.dataset.kind = kind; },
-    setPoints(points) { state.points = points; panel.render(); },
+    setPoints(points, { demo = false } = {}) {
+      Object.assign(state, { points, demo, priced: null, priceError: '' });
+      panel.render();
+      loadPrices();
+    },
     render() {
       if (panelEl.hidden) return;
       if (!state.points) { chartEl.replaceChildren(placeholder('Aucune donnée à afficher pour le moment.')); return; }
-      const { view, cap, agg, step } = getOptions();
-      // Agrégation sans effet si chaque case ne contient qu'une mesure (ex. pas de 30 min sur une courbe Linky)
+      const { view, cap, agg, step, metric } = getOptions();
+      const power = metric === 'power';
+      // Agrégation sans effet si chaque case ne contient qu'une mesure (ex. pas de 30 min sur une courbe Linky),
+      // ou pour le prix (toujours moyenné) et le coût (toujours sommé)
       const single = step <= stepMinutes(state.points);
-      aggEl.disabled = single;
-      aggEl.title = single ? 'Une seule mesure par case à ce pas de temps : rien à agréger' : '';
-      const rows = aggregate(state.points, { agg, cap, step });
+      aggEl.disabled = single || !power;
+      aggEl.title = !power ? 'Prix moyenné et coût sommé sur chaque case' : single ? 'Une seule mesure par case à ce pas de temps : rien à agréger' : '';
+      capEl.disabled = !power;
       const width = chartEl.clientWidth || 720;
+      const market = renderMarket(step, width);
+      renderKpis(kpisEl, summarize(state.points), market);
+      if (!power && !state.priced) {
+        state.chart = null;
+        exportsEl.hidden = true;
+        chartEl.replaceChildren(placeholder(state.priceError || 'Chargement des prix de marché…'));
+        return;
+      }
+      const rows = aggregate(power ? state.points : state.priced, { agg, cap, step, metric });
       state.chart = view === 'month' ? monthHeatmap(rows, { cap, width }) : longHeatmap(rows, { cap, width });
       chartEl.replaceChildren(state.chart);
-      renderKpis(kpisEl, summarize(state.points));
       exportsEl.hidden = false;
     },
   };
@@ -107,7 +184,8 @@ const apiForm = document.getElementById('api-form');
 const apiPanel = makePanel(document.getElementById('panel-api'), {
   filePrefix: 'optiwatt-courbe',
   aggEl: apiForm.agg,
-  getOptions: () => ({ view: 'long', cap: +apiForm.cap.value, agg: apiForm.agg.value, step: +apiForm.step.value }),
+  capEl: apiForm.cap,
+  getOptions: () => ({ view: 'long', cap: +apiForm.cap.value, agg: apiForm.agg.value, step: +apiForm.step.value, metric: apiForm.metric.value }),
 });
 
 (function initApiForm() {
@@ -125,7 +203,7 @@ const apiPanel = makePanel(document.getElementById('panel-api'), {
   apiForm.querySelector('[data-toggle-token]').addEventListener('click', () => {
     apiForm.token.type = apiForm.token.type === 'password' ? 'text' : 'password';
   });
-  for (const name of ['cap', 'agg', 'step']) apiForm[name].addEventListener('change', () => apiPanel.render());
+  for (const name of ['cap', 'agg', 'step', 'metric']) apiForm[name].addEventListener('change', () => apiPanel.render());
 })();
 
 apiForm.addEventListener('submit', async (e) => {
@@ -168,10 +246,11 @@ const csvForm = document.getElementById('csv-form');
 const csvPanel = makePanel(document.getElementById('panel-csv'), {
   filePrefix: 'optiwatt-enedis',
   aggEl: csvForm.agg,
-  getOptions: () => ({ view: csvForm.view.value, cap: +csvForm.cap.value, agg: csvForm.agg.value, step: +csvForm.step.value }),
+  capEl: csvForm.cap,
+  getOptions: () => ({ view: csvForm.view.value, cap: +csvForm.cap.value, agg: csvForm.agg.value, step: +csvForm.step.value, metric: csvForm.metric.value }),
 });
 csvForm.cap.value = '0';
-for (const name of ['view', 'cap', 'agg', 'step']) csvForm[name].addEventListener('change', () => csvPanel.render());
+for (const name of ['view', 'cap', 'agg', 'step', 'metric']) csvForm[name].addEventListener('change', () => csvPanel.render());
 
 csvForm.file.addEventListener('change', async () => {
   const file = csvForm.file.files[0];
@@ -185,7 +264,7 @@ csvForm.file.addEventListener('change', async () => {
   }
 });
 csvForm.querySelector('[data-demo]').addEventListener('click', () => {
-  csvPanel.setPoints(demoPoints());
+  csvPanel.setPoints(demoPoints(), { demo: true });
   csvPanel.status("Données d'exemple fictives (365 jours).", 'ok');
 });
 

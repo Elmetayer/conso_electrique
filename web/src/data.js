@@ -73,27 +73,36 @@ export const isoDay = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-
  * Agrège les mesures par jour et par créneau de `step` minutes (30 = pas le plus fin
  * d'une courbe de charge Linky, 60 = une case par heure).
  * @param {{t: Date, v: number}[]} points
- * @param {{agg?: 'mean'|'max', cap?: number, step?: 30|60}} opts cap = plafond en W (puissance souscrite), 0/undefined = aucun
+ * @param {{agg?: 'mean'|'max', cap?: number, step?: 30|60, metric?: 'power'|'price'|'cost'}} opts
+ *   cap = plafond en W (puissance souscrite), 0/undefined = aucun ;
+ *   metric = grandeur de la case : puissance (W, défaut), prix de gros moyen (€/MWh) ou coût au prix de gros (€).
+ *   Pour 'price' et 'cost', les mesures doivent porter un prix `p` (voir prices.js) ; les cases sans prix sont omises.
  * @returns {{date: string, month: string, day: number, slot: number, hour: number, minute: number, step: number,
  *            value: number, raw: number, capped: boolean}[]}
  *   slot = index du créneau dans la journée (0 à 1440/step - 1)
  */
-export function aggregate(points, { agg = 'mean', cap, step = 60 } = {}) {
+export function aggregate(points, { agg = 'mean', cap, step = 60, metric = 'power' } = {}) {
   const groups = new Map();
-  for (const { t, v } of points) {
+  const ptStep = metric === 'cost' ? stepMinutes(points) : 0;
+  for (const { t, v, p } of points) {
+    let x = v;
+    if (metric !== 'power') {
+      if (p == null) continue;
+      x = metric === 'price' ? p : (v * (ptStep / 60) / 1e6) * p; // € = MWh × €/MWh
+    }
     const s = new Date(t.getTime() - 60_000); // début d'intervalle
     const slot = Math.floor((s.getUTCHours() * 60 + s.getUTCMinutes()) / step);
     const key = `${isoDay(s)}|${slot}`;
     const g = groups.get(key);
-    if (g) { g.sum += v; g.n += 1; g.max = Math.max(g.max, v); }
-    else groups.set(key, { sum: v, n: 1, max: v });
+    if (g) { g.sum += x; g.n += 1; g.max = Math.max(g.max, x); }
+    else groups.set(key, { sum: x, n: 1, max: x });
   }
   const rows = [];
   for (const [key, g] of groups) {
     const [date, sl] = key.split('|');
     const slot = +sl;
-    const raw = agg === 'max' ? g.max : g.sum / g.n;
-    const capped = cap > 0 && raw > cap;
+    const raw = metric === 'cost' ? g.sum : metric === 'price' ? g.sum / g.n : agg === 'max' ? g.max : g.sum / g.n;
+    const capped = metric === 'power' && cap > 0 && raw > cap;
     rows.push({
       date,
       month: date.slice(0, 7),
@@ -102,6 +111,7 @@ export function aggregate(points, { agg = 'mean', cap, step = 60 } = {}) {
       hour: Math.floor((slot * step) / 60),
       minute: (slot * step) % 60,
       step,
+      metric,
       raw,
       value: capped ? cap : raw,
       capped,
