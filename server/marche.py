@@ -1,6 +1,9 @@
-"""Prix day-ahead France depuis la plateforme de transparence ENTSO-E.
+"""Prix day-ahead et consommation France depuis la plateforme de transparence ENTSO-E.
 
 - Requête « Day-ahead prices » (documentType A44) sur la zone France.
+- Requête « Actual Total Load » (documentType A65, processType A16) : consommation
+  nationale réalisée, en MW. Elle sert à pondérer le prix moyen du marché comme on
+  pondère le prix capté par une consommation individuelle.
 - Réponse XML : séries (TimeSeries) > périodes (Period) avec un début UTC, une
   résolution (PT15M depuis octobre 2025, PT60M avant) et des points numérotés.
   Les points répétés peuvent être omis (courbe « A03 ») : on prolonge alors la
@@ -105,6 +108,16 @@ RESOLUTIONS = {"PT15M": 15, "PT30M": 30, "PT60M": 60}
 
 def parse_prices(xml_bytes: bytes) -> dict[datetime, float]:
     """XML A44 -> {début UTC du quart d'heure: prix €/MWh}. Les séries les plus fines l'emportent."""
+    return parse_series(xml_bytes, "price.amount")
+
+
+def parse_load(xml_bytes: bytes) -> dict[datetime, float]:
+    """XML A65 -> {début UTC du quart d'heure: consommation France en MW}."""
+    return parse_series(xml_bytes, "quantity")
+
+
+def parse_series(xml_bytes: bytes, field: str) -> dict[datetime, float]:
+    """Série temporelle ENTSO-E ramenée au quart d'heure (valeur `field` de chaque point)."""
     root = ET.fromstring(xml_bytes)
     kind = _local(root.tag)
     if kind == "Acknowledgement_MarketDocument":
@@ -124,7 +137,7 @@ def parse_prices(xml_bytes: bytes) -> dict[datetime, float]:
             n = int((t1 - t0) / timedelta(minutes=res))
             values: dict[int, float] = {}
             for pt in (c for c in period if _local(c.tag) == "Point"):
-                pos, price = _text(pt, "position"), _text(pt, "price.amount")
+                pos, price = _text(pt, "position"), _text(pt, field)
                 if pos and price:
                     values[int(pos)] = float(price)
             target = by_res.setdefault(res, {})
@@ -144,22 +157,13 @@ def parse_prices(xml_bytes: bytes) -> dict[datetime, float]:
 
 # ---------- Appel ----------
 
-def fetch_month(month: str, token: str) -> list[list]:
-    """Prix d'un mois : [[heure murale 'AAAA-MM-JJTHH:MM', prix], …] au pas de 15 min."""
-    t0, t1 = month_bounds(month)
-    params = {
-        "securityToken": token,
-        "documentType": "A44",
-        "in_Domain": ZONE_FR,
-        "out_Domain": ZONE_FR,
-        "periodStart": t0.strftime("%Y%m%d%H%M"),
-        "periodEnd": t1.strftime("%Y%m%d%H%M"),
-    }
-    req = urllib.request.Request(f"{ENTSOE_URL}?{urllib.parse.urlencode(params)}",
+def _get(params: dict, token: str) -> bytes:
+    query = urllib.parse.urlencode({"securityToken": token, **params})
+    req = urllib.request.Request(f"{ENTSOE_URL}?{query}",
                                  headers={"User-Agent": "OptiWatt-relay (+https://github.com/Elmetayer/conso_electrique)"})
     try:
         with urllib.request.urlopen(req, timeout=60) as res:
-            body = res.read()
+            return res.read()
     except urllib.error.HTTPError as e:
         body = e.read()
         if e.code == 401:
@@ -168,8 +172,22 @@ def fetch_month(month: str, token: str) -> list[list]:
             raise MarketError(503, "ENTSO-E limite le nombre de requêtes, réessayez dans une minute") from e
         if b"Acknowledgement_MarketDocument" not in body:
             raise MarketError(502, f"ENTSO-E indisponible (HTTP {e.code})") from e
+        return body
     except (urllib.error.URLError, TimeoutError) as e:
         raise MarketError(502, f"ENTSO-E injoignable ({e})") from e
-    prices = parse_prices(body)
-    return [[utc_to_paris(t).strftime("%Y-%m-%dT%H:%M"), round(p, 2)]
+
+
+def fetch_month(month: str, token: str) -> list[list]:
+    """Un mois au pas de 15 min : [[heure murale 'AAAA-MM-JJTHH:MM', prix €/MWh, conso France MW ou None], …].
+
+    La consommation est facultative : si ENTSO-E ne la fournit pas, les prix sont renvoyés seuls.
+    """
+    t0, t1 = month_bounds(month)
+    period = {"periodStart": t0.strftime("%Y%m%d%H%M"), "periodEnd": t1.strftime("%Y%m%d%H%M")}
+    prices = parse_prices(_get({"documentType": "A44", "in_Domain": ZONE_FR, "out_Domain": ZONE_FR, **period}, token))
+    try:
+        load = parse_load(_get({"documentType": "A65", "processType": "A16", "outBiddingZone_Domain": ZONE_FR, **period}, token))
+    except MarketError:
+        load = {}
+    return [[utc_to_paris(t).strftime("%Y-%m-%dT%H:%M"), round(p, 2), None if t not in load else round(load[t])]
             for t, p in sorted(prices.items()) if t0 <= t < t1]

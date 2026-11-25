@@ -72,17 +72,52 @@ def test_aucune_donnee():
     assert marche.parse_prices(ACK) == {}
 
 
-def test_fetch_month_en_heure_de_paris(monkeypatch):
+LOAD = f"""<GL_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0">
+  <TimeSeries><Period>
+    <timeInterval><start>2026-11-19T23:00Z</start><end>2026-11-20T00:00Z</end></timeInterval>
+    <resolution>PT15M</resolution>
+    <Point><position>1</position><quantity>61000</quantity></Point>
+    <Point><position>2</position><quantity>60500</quantity></Point>
+    <Point><position>3</position><quantity>60000</quantity></Point>
+    <Point><position>4</position><quantity>59000</quantity></Point>
+  </Period></TimeSeries>
+</GL_MarketDocument>""".encode()
+
+
+def fake_urlopen(responses, seen):
     class Res:
-        status = 200
+        def __init__(self, body): self.body = body
         def __enter__(self): return self
         def __exit__(self, *a): pass
-        def read(self): return XML
-    seen = {}
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: seen.setdefault("url", req.full_url) and Res())
+        def read(self): return self.body
+
+    def urlopen(req, timeout):
+        seen.append(req.full_url)
+        doc = "A65" if "documentType=A65" in req.full_url else "A44"
+        body = responses[doc]
+        if isinstance(body, Exception):
+            raise body
+        return Res(body)
+    return urlopen
+
+
+def test_fetch_month_prix_et_conso_france(monkeypatch):
+    seen = []
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen({"A44": XML, "A65": LOAD}, seen))
     pts = marche.fetch_month("2026-11", "tok")
-    assert "periodStart=202610312300" in seen["url"] and "periodEnd=202611302300" in seen["url"]
-    assert pts[0] == ["2026-11-20T00:00", 70.5] and pts[-1] == ["2026-11-20T01:45", 88]
+    assert "periodStart=202610312300" in seen[0] and "periodEnd=202611302300" in seen[0]
+    assert "processType=A16" in seen[1] and "outBiddingZone_Domain=10YFR-RTE------C" in seen[1]
+    assert pts[0] == ["2026-11-20T00:00", 70.5, 61000]
+    assert pts[3] == ["2026-11-20T00:45", -5, 59000]
+    assert pts[-1] == ["2026-11-20T01:45", 88, None]  # pas de conso publiée : prix seul
+
+
+def test_fetch_month_sans_conso(monkeypatch):
+    import urllib.error
+    err = urllib.error.URLError("timeout")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen({"A44": XML, "A65": err}, []))
+    pts = marche.fetch_month("2026-11", "tok")
+    assert pts[0] == ["2026-11-20T00:00", 70.5, None]
 
 
 def test_duree_de_cache():
@@ -99,7 +134,7 @@ def server(monkeypatch):
 
     def fake_month(month, token):
         calls.append(month)
-        return [[f"{month}-01T00:00", 50.0], [f"{month}-20T23:45", 60.0]]
+        return [[f"{month}-01T00:00", 50.0, 60000], [f"{month}-20T23:45", 60.0, None]]
 
     monkeypatch.setattr(marche, "fetch_month", fake_month)
     monkeypatch.setattr(main, "ENTSOE_TOKEN", "tok")
@@ -118,7 +153,7 @@ def test_route_prix_puis_cache(server):
     assert (s1, s2) == (200, 200) and h1["X-OptiWatt-Cache"] == "MISS" and h2["X-OptiWatt-Cache"] == "HIT"
     assert calls == ["2026-10", "2026-11"]
     # filtrage sur [debut, fin[ : le 01/10 est exclu, le 01/11 et le 20/11 inclus
-    assert body["points"] == [["2026-10-20T23:45", 60.0], ["2026-11-01T00:00", 50.0], ["2026-11-20T23:45", 60.0]]
+    assert body["points"] == [["2026-10-20T23:45", 60.0, None], ["2026-11-01T00:00", 50.0, 60000], ["2026-11-20T23:45", 60.0, None]]
     assert body["source"].startswith("ENTSO-E") and body["pas"] == 15
 
 

@@ -107,19 +107,21 @@
       <table>
         <tr><th>Indicateur</th><th>Calcul</th><th>Lecture</th></tr>
         <tr><td>Valorisation au prix de gros</td><td>Σ (énergie de chaque mesure × prix de la période)</td><td>Coût de l'énergie seule : sans acheminement (TURPE), taxes ni marge du fournisseur. Ce n'est pas votre facture.</td></tr>
-        <tr><td>Prix capté</td><td>Valorisation ÷ énergie consommée</td><td>Prix moyen de <em>votre</em> MWh, pondéré par votre consommation.</td></tr>
-        <tr><td>Facteur de forme</td><td>Prix capté ÷ prix moyen du marché sur la même période</td><td>Au-dessus de 1, vous consommez plutôt aux heures chères ; en dessous, aux heures bon marché.</td></tr>
+        <tr><td>Ton prix capté</td><td>Σ (votre énergie × prix) ÷ Σ votre énergie</td><td>Prix moyen de <em>votre</em> MWh : moyenne des prix pondérée par votre consommation.</td></tr>
+        <tr><td>Prix capté par la conso France<br>(prix moyen du marché)</td><td>Σ (consommation France × prix) ÷ Σ consommation France, sur les mêmes créneaux</td><td>Même calcul, pondéré par la consommation nationale : prix moyen du MWh consommé en France sur votre période.</td></tr>
+        <tr><td>Facteur de forme</td><td>Ton prix capté ÷ prix capté par la conso France</td><td>Au-dessus de 1, votre profil de consommation coûte plus cher que le profil moyen français ; en dessous, moins cher.</td></tr>
       </table>
+      <p class="callout">Pourquoi pondérer le prix du marché ? Les deux prix moyens doivent se calculer de la même façon pour être comparables. Une moyenne simple des prix (chaque quart d'heure pèse autant, nuit comprise) donne le prix « base » : elle sous-estime ce que paie un consommateur, qui consomme davantage aux heures chères. En pondérant par la consommation nationale, le facteur de forme compare <em>votre</em> profil au profil moyen français, et non à un profil plat. Si la consommation nationale manque sur une partie de la période, l'application revient à la moyenne simple et l'indique.</p>
       <h3>Facture « marché de gros »</h3>
       <p>La section des prix de gros comprend aussi :</p>
       <ul>
         <li><strong>Ta consommation face au prix</strong> : la puissance et le prix day-ahead sur le même axe de temps, pour voir si les pics de conso tombent sur les pics de prix. Au-delà de 8 jours, un sélecteur affiche une semaine à la fois (la plus récente par défaut).</li>
-        <li><strong>Prix capté et prix moyen du marché</strong> : par jour jusqu'à 31 jours, par semaine jusqu'à 120 jours, par mois au-delà. Point plein orange : ce jour-là, ton kWh a coûté plus cher que le kWh moyen du marché ; bleu : moins cher.</li>
+        <li><strong>Ton prix capté et celui de la consommation française</strong> : par jour jusqu'à 31 jours, par semaine jusqu'à 120 jours, par mois au-delà. Point plein : votre prix capté ; point creux : celui de la consommation nationale. Orange : ce jour-là, votre kWh a coûté plus cher que le kWh moyen consommé en France ; bleu : moins cher.</li>
         <li><strong>Comparer à mon offre</strong> : saisis le prix du kWh de ta facture (€/kWh TTC). L'application affiche le coût de la même énergie avec ton offre, l'écart et la part du prix de gros dans ce coût. L'écart correspond à l'acheminement (TURPE), aux taxes, aux coûts et à la marge du fournisseur : ce n'est pas une économie possible. Le prix saisi est gardé sur l'appareil (stockage local).</li>
       </ul>
       <h3>Source et calcul</h3>
       <ul>
-        <li>Les prix viennent de la <a href="https://transparency.entsoe.eu" rel="noopener">plateforme de transparence ENTSO-E</a> (zone France), via le relais (voir <a href="#relais">§ 9</a>). Ils sont au pas de 15 minutes depuis octobre 2025, horaires avant.</li>
+        <li>Les prix viennent de la <a href="https://transparency.entsoe.eu" rel="noopener">plateforme de transparence ENTSO-E</a> (zone France), via le relais (voir <a href="#relais">§ 9</a>). Ils sont au pas de 15 minutes depuis octobre 2025, horaires avant. La consommation nationale vient de la même plateforme (« Actual Total Load », consommation réalisée).</li>
         <li>Une mesure Linky de 30 minutes reçoit la moyenne des deux quarts d'heure qu'elle couvre. Une mesure sans prix (jour pas encore publié, trou de données) est ignorée dans les calculs ; l'application indique alors la part des mesures valorisées.</li>
         <li>Les données d'exemple utilisent des prix fictifs.</li>
       </ul>
@@ -187,7 +189,7 @@
 
       <h3>Prix de gros (ENTSO-E)</h3>
       <p>Le relais sert aussi <code>GET /api/prix_day_ahead?debut=AAAA-MM-JJ&amp;fin=AAAA-MM-JJ</code> (fin exclue, 3 ans maximum). Il interroge ENTSO-E avec un token gardé côté serveur, découpe la demande par mois civil et met chaque mois en cache : <strong>30 jours</strong> pour un mois terminé (les prix publiés ne changent plus), <strong>1 heure</strong> pour le mois en cours. Aucun PRM ni token Linky n'est transmis pour cette route. Les mois réellement demandés à ENTSO-E sont limités à <code>MARKET_RATE_LIMIT</code> par heure et par IP.</p>
-      <p>La réponse contient des couples <code>[heure de Paris de début du quart d'heure, prix en €/MWh]</code>. Sans token configuré, la route répond <code>503</code> et l'application affiche les heatmaps de puissance comme avant.</p>
+      <p>La réponse contient des triplets <code>[heure de Paris de début du quart d'heure, prix en €/MWh, consommation France en MW]</code> ; la consommation vaut <code>null</code> quand ENTSO-E ne l'a pas encore publiée (par exemple pour le lendemain, dont le prix est déjà connu). Sans token configuré, la route répond <code>503</code> et l'application affiche les heatmaps de puissance comme avant.</p>
       <p class="callout">Obtenir un token ENTSO-E : créer un compte sur <a href="https://transparency.entsoe.eu" rel="noopener">transparency.entsoe.eu</a>, écrire à <code>transparency@entsoe.eu</code> avec l'objet « Restful API access » en indiquant l'e-mail du compte, puis générer le token dans <em>My Account Settings</em> une fois l'accès accordé.</p>
 
       <h3>Réglages</h3>

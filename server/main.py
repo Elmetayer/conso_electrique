@@ -245,6 +245,7 @@ class Handler(BaseHTTPRequestHandler):
             "unite": "EUR/MWh",
             "pas": 15,
             "horodatage": "début d'intervalle, heure de Paris",
+        "colonnes": ["heure", "prix (EUR/MWh)", "consommation France (MW)"],
             "points": points,
         }
         self._send(200, json.dumps(body, separators=(",", ":")).encode(), cors, cache=origin)

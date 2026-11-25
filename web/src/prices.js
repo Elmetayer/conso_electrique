@@ -1,5 +1,11 @@
 // Prix de gros day-ahead France (ENTSO-E via le relais) et valorisation de la consommation.
 //
+// Deux prix moyens, calculés de la même façon (moyenne des prix pondérée par un volume consommé) :
+// - « ton prix capté » : pondéré par TA consommation (courbe de charge Linky) ;
+// - « prix capté par la consommation française » (prix moyen du marché) : pondéré par la
+//   consommation nationale réalisée (ENTSO-E, Actual Total Load), sur les mêmes intervalles.
+// Si la consommation nationale manque, repli sur la moyenne simple des prix (chaque intervalle pèse autant).
+//
 // Conventions (cf. data.js) : heures murales stockées en UTC dans des Date.
 // - Prix : horodatage = DÉBUT du quart d'heure.
 // - Courbe Linky : horodatage = FIN de l'intervalle (t - pas → t).
@@ -9,32 +15,61 @@ import { isoDay, parseTimestamp, stepMinutes } from './data.js';
 
 const Q = 15 * 60_000;
 
-/** Réponse du relais -> Map(ms du début du quart d'heure -> €/MWh). Doublons (heure d'hiver) moyennés. */
+/**
+ * Réponse du relais -> { prices, loads } : Map(ms du début du quart d'heure -> €/MWh, resp. MW de
+ * consommation France). Doublons (heure d'hiver) moyennés.
+ */
 export function parsePriceResponse(json) {
-  const acc = new Map();
-  for (const [ts, p] of json?.points ?? []) {
+  const accP = new Map(); const accL = new Map();
+  const add = (acc, k, v) => { const a = acc.get(k); if (a) { a.sum += v; a.n += 1; } else acc.set(k, { sum: v, n: 1 }); };
+  for (const [ts, p, l] of json?.points ?? []) {
     const t = parseTimestamp(ts);
     if (!t || !Number.isFinite(p)) continue;
-    const a = acc.get(t.getTime());
-    if (a) { a.sum += p; a.n += 1; } else acc.set(t.getTime(), { sum: p, n: 1 });
+    add(accP, t.getTime(), p);
+    if (Number.isFinite(l) && l > 0) add(accL, t.getTime(), l);
   }
-  return new Map([...acc].map(([k, a]) => [k, a.sum / a.n]));
+  const avg = (acc) => new Map([...acc].map(([k, a]) => [k, a.sum / a.n]));
+  return { prices: avg(accP), loads: avg(accL) };
 }
 
-/** Ajoute à chaque mesure son prix moyen `p` (€/MWh), ou null si un quart d'heure manque. */
-export function attachPrices(points, prices) {
+/**
+ * Ajoute à chaque mesure son prix moyen `p` (€/MWh) et la consommation France moyenne `l` (MW)
+ * sur l'intervalle, ou null si un quart d'heure manque. Avec la conso France, `p` est la moyenne
+ * des quarts d'heure pondérée par cette conso (cohérent avec la pondération du prix de marché).
+ */
+export function attachPrices(points, prices, loads = new Map()) {
   const step = stepMinutes(points);
   const quarters = Math.max(1, Math.round(step / 15));
   return points.map((pt) => {
     const start = pt.t.getTime() - step * 60_000;
-    let sum = 0;
+    let sum = 0; let lsum = 0; let plsum = 0; let hasLoad = true;
     for (let i = 0; i < quarters; i++) {
       const v = prices.get(start + i * Q);
-      if (v === undefined) return { ...pt, p: null };
+      if (v === undefined) return { ...pt, p: null, l: null };
+      const l = loads.get(start + i * Q);
+      if (l === undefined) hasLoad = false; else { lsum += l; plsum += v * l; }
       sum += v;
     }
-    return { ...pt, p: sum / quarters };
+    return { ...pt, p: sum / quarters, l: hasLoad ? lsum / quarters : null, pl: hasLoad ? plsum / lsum : null };
   });
+}
+
+/** Accumulateur commun : ton prix capté et le prix capté par la consommation France, sur les mêmes intervalles. */
+function newAcc() { return { mwh: 0, cost: 0, psum: 0, n: 0, lsum: 0, plsum: 0, nl: 0 }; }
+function accumulate(a, pt, step) {
+  const e = (pt.v * (step / 60)) / 1e6;
+  a.mwh += e; a.cost += e * pt.p; a.psum += pt.p; a.n += 1;
+  if (pt.l != null) { a.lsum += pt.l; a.plsum += pt.pl * pt.l; a.nl += 1; }
+}
+function finish(a) {
+  const weighted = a.nl > 0 && a.nl === a.n; // conso France connue sur tous les intervalles
+  return {
+    energyKWh: a.mwh * 1000,
+    cost: a.cost,
+    captured: a.cost / a.mwh,
+    market: weighted ? a.plsum / a.lsum : a.psum / a.n,
+    marketKind: weighted ? 'france' : 'simple',
+  };
 }
 
 /** Coût en € d'une mesure (puissance moyenne v en W sur `step` minutes, prix p en €/MWh). */
@@ -42,22 +77,19 @@ export const costOf = (v, p, step) => (v * (step / 60) / 1e6) * p;
 
 /**
  * Indicateurs « marché » sur les mesures valorisées.
- * - prix capté = coût / énergie (prix moyen pondéré par la conso)
- * - prix moyen du marché = moyenne simple des prix sur les mêmes intervalles
- * - facteur de forme = prix capté / prix moyen (> 1 : conso aux heures chères)
+ * - ton prix capté = Σ (ton énergie × prix) / Σ ton énergie
+ * - prix capté par la conso France (prix moyen du marché) = Σ (conso France × prix) / Σ conso France,
+ *   sur les mêmes intervalles ; moyenne simple des prix si la conso France manque (marketKind 'simple')
+ * - facteur de forme = ton prix capté / prix capté par la conso France
+ *   (> 1 : ton profil de conso coûte plus cher que le profil moyen français)
  */
 export function summarizeMarket(points) {
   const step = stepMinutes(points);
-  let mwh = 0; let cost = 0; let psum = 0; let n = 0;
-  for (const { v, p } of points) {
-    if (p == null) continue;
-    const e = (v * (step / 60)) / 1e6;
-    mwh += e; cost += e * p; psum += p; n += 1;
-  }
-  if (!n || mwh <= 0) return null;
-  const captured = cost / mwh;
-  const market = psum / n;
-  return { energyKWh: mwh * 1000, cost, captured, market, shape: captured / market, coverage: n / points.length };
+  const a = newAcc();
+  for (const pt of points) if (pt.p != null) accumulate(a, pt, step);
+  if (!a.n || a.mwh <= 0) return null;
+  const r = finish(a);
+  return { ...r, shape: r.captured / r.market, coverage: a.n / points.length };
 }
 
 /** Bornes de la requête de prix [debut, fin[ couvrant toutes les mesures. */
@@ -68,6 +100,20 @@ export function priceRange(points) {
 }
 
 /** Prix fictifs (pour les données d'exemple) : profil journalier + saison + quelques pics et prix négatifs. */
+export function demoLoads(prices) {
+  // Conso France fictive : 45 à 80 GW, plus forte l'hiver, pointes le matin et le soir
+  const loads = new Map();
+  for (const t of prices.keys()) {
+    const d = new Date(t);
+    const h = d.getUTCHours() + d.getUTCMinutes() / 60;
+    const doy = (t - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86_400_000;
+    const winter = Math.max(0, Math.cos((2 * Math.PI * (doy - 15)) / 365));
+    const shape = 0.82 + 0.12 * Math.exp(-(((h - 9) / 2.5) ** 2)) + 0.18 * Math.exp(-(((h - 19.5) / 2) ** 2)) - (h < 6 ? 0.08 : 0);
+    loads.set(t, Math.round((48000 + 30000 * winter) * shape));
+  }
+  return loads;
+}
+
 export function demoPrices(points) {
   const prices = new Map();
   if (!points.length) return prices;
@@ -93,7 +139,7 @@ export function demoPrices(points) {
   return prices;
 }
 
-/** Récupère les prix auprès du relais OptiWatt. */
+/** Récupère les prix (et la conso France) auprès du relais OptiWatt : { prices, loads }. */
 export async function fetchDayAhead({ baseUrl, debut, fin }) {
   if (!baseUrl) throw new Error("Prix de marché indisponibles : aucune URL de relais n'est configurée (paramètres avancés de l'onglet API).");
   const url = `${baseUrl.replace(/\/+$/, '')}/api/prix_day_ahead?${new URLSearchParams({ debut, fin })}`;
@@ -103,9 +149,9 @@ export async function fetchDayAhead({ baseUrl, debut, fin }) {
   let body = null;
   try { body = await res.json(); } catch { /* corps non JSON */ }
   if (!res.ok) throw new Error(`Prix de marché : ${body?.message ?? `erreur ${res.status}`}`);
-  const prices = parsePriceResponse(body);
-  if (!prices.size) throw new Error('Prix de marché : aucune donnée ENTSO-E sur cette période.');
-  return prices;
+  const market = parsePriceResponse(body);
+  if (!market.prices.size) throw new Error('Prix de marché : aucune donnée ENTSO-E sur cette période.');
+  return market;
 }
 
 // ---------- Maquette A : chronologie, prix capté par période, comparaison avec son offre ----------
@@ -138,20 +184,19 @@ function groupKey(day, unit) {
   return day;
 }
 
-/** Prix capté et prix moyen du marché par jour, semaine (clé = lundi) ou mois. */
+/** Ton prix capté et prix capté par la conso France, par jour, semaine (clé = lundi) ou mois. */
 export function capturedBy(points, unit = 'day') {
   const step = stepMinutes(points);
   const acc = new Map();
   for (const pt of points) {
     if (pt.p == null) continue;
     const key = groupKey(dayOf(pt), unit);
-    const a = acc.get(key) ?? { mwh: 0, cost: 0, psum: 0, n: 0 };
-    const e = (pt.v * (step / 60)) / 1e6;
-    a.mwh += e; a.cost += e * pt.p; a.psum += pt.p; a.n += 1;
+    const a = acc.get(key) ?? newAcc();
+    accumulate(a, pt, step);
     acc.set(key, a);
   }
   return [...acc].sort(([a], [b]) => (a < b ? -1 : 1)).filter(([, a]) => a.mwh > 0)
-    .map(([key, a]) => ({ key, unit, captured: a.cost / a.mwh, market: a.psum / a.n, energyKWh: a.mwh * 1000, cost: a.cost }));
+    .map(([key, a]) => ({ key, unit, ...finish(a) }));
 }
 
 /** "0,1952" ou "0.1952" -> 0.1952 ; null si vide ou invalide. */
