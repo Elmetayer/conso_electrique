@@ -4,7 +4,7 @@ Visualisez la consommation de votre compteur Linky sous forme de heatmaps (jour 
 
 **Application :** https://elmetayer.github.io/conso_electrique/ · **Documentation :** [docs.html](https://elmetayer.github.io/conso_electrique/docs.html)
 
-- **Ma consommation** : courbe de charge des 1 à 7 derniers jours via [conso.boris.sh](https://conso.boris.sh) (PRM + token).
+- **Ma consommation** : courbe de charge des 1 à 30 derniers jours via [conso.boris.sh](https://conso.boris.sh) (PRM + token).
 - **Import d'un fichier Enedis** : CSV de l'espace client, vue « par mois » ou « long », sans limite de durée.
 - Pas de temps d'1 heure ou de 30 minutes (le plus fin, une case par mesure Linky), indicateurs (énergie, pic), plafond de puissance souscrite, export PNG / SVG / CSV, données d'exemple (`?demo`).
 
@@ -32,7 +32,7 @@ L'import CSV n'utilise pas le relais : il est traité entièrement dans le navig
 Pour ménager le quota Enedis, partagé par tous les utilisateurs de conso.boris.sh, et ne pas faire bloquer son IP :
 
 - **Cache de 12 h par requête.** Une réponse réussie est gardée en mémoire 12 h. La clé est l'empreinte (SHA-256) du type de données, des paramètres (PRM, dates) et du token. Redemander exactement la même chose pendant ce délai ne génère aucun appel à Enedis (en-tête `X-OptiWatt-Cache: HIT`). Les erreurs ne sont pas mises en cache. Le cache vit dans la RAM du conteneur Railway et contient au plus 1 000 réponses (~15 Mo) : au-delà, les plus anciennes sont supprimées en premier.
-- **10 requêtes par heure et par IP.** Chaque adresse IP cliente peut déclencher au plus 10 appels réels vers conso.boris.sh sur une heure glissante. Les réponses servies par le cache ne sont pas comptées. Au-delà, le relais répond `429` sans contacter conso.boris.sh.
+- **30 requêtes par heure et par IP.** Chaque adresse IP cliente peut déclencher au plus 30 appels réels vers conso.boris.sh sur une heure glissante. Les réponses servies par le cache ne sont pas comptées. Au-delà, le relais répond `429` sans contacter conso.boris.sh.
 
 Ces valeurs se règlent avec les variables `CACHE_HOURS`, `CACHE_MAX_ENTRIES` et `RATE_LIMIT`. Le détail est dans la [documentation](https://elmetayer.github.io/conso_electrique/docs.html#relais).
 

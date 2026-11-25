@@ -1,12 +1,14 @@
 import './style.css';
-import { aggregate, apiRange, parseEnedisCsv, stepMinutes, summarize, toCsv } from './data.js';
+import { aggregate, apiRange, isoDay, mergePoints, parseEnedisCsv, splitRange, stepMinutes, summarize, toCsv } from './data.js';
 import { fetchLoadCurve } from './api.js';
-import { dailyCostChart, exportCsv, exportPng, exportSvg, longHeatmap, monthHeatmap, placeholder, profileChart } from './charts.js';
+import { capturedChart, dailyCostChart, exportCsv, exportPng, exportSvg, longHeatmap, monthHeatmap, placeholder, profileChart, timelineChart } from './charts.js';
 import { demoPoints } from './demo.js';
-import { attachPrices, demoPrices, fetchDayAhead, priceRange, summarizeMarket } from './prices.js';
+import { attachPrices, capturedBy, capturedUnit, compareOffer, demoPrices, fetchDayAhead, parseEuro, pointsIn, priceRange, summarizeMarket, weekWindows } from './prices.js';
 
 const CAP_OPTIONS = [3, 6, 9, 12, 15, 18, 24, 30, 36];
 const STORE_KEY = 'optiwatt.settings';
+const OFFER_KEY = 'optiwatt.offre'; // prix du kWh de l'offre, pour la comparaison au prix de gros
+const panels = [];
 const ENV_PROXY = import.meta.env.VITE_PROXY_URL ?? '';
 /** URL du relais (paramètres avancés de l'onglet API, sinon celle de la configuration du site). */
 const relayUrl = () => document.getElementById('api-form')?.proxy.value.trim() || ENV_PROXY;
@@ -84,6 +86,48 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
   const marketNoteEl = panelEl.querySelector('[data-market-note]');
   const profileEl = panelEl.querySelector('[data-profile]');
   const dailyEl = panelEl.querySelector('[data-daily]');
+  const timelineEl = panelEl.querySelector('[data-timeline]');
+  const weekWrap = panelEl.querySelector('[data-week-wrap]');
+  const weekEl = panelEl.querySelector('[data-week]');
+  const capturedEl = panelEl.querySelector('[data-captured]');
+  const capturedUnitEl = panelEl.querySelector('[data-captured-unit]');
+  const offerEl = panelEl.querySelector('[data-offer]');
+  const offerResultEl = panelEl.querySelector('[data-offer-result]');
+  offerEl.value = store.get(OFFER_KEY, '') ?? '';
+  weekEl.addEventListener('change', () => renderTimeline());
+  offerEl.addEventListener('input', () => {
+    store.set(OFFER_KEY, offerEl.value.trim() || null);
+    for (const p of panels) p.syncOffer(offerEl.value);
+  });
+
+  /** Chronologie conso × prix ; au-delà de 8 jours, une semaine à la fois (sélecteur). */
+  function renderTimeline() {
+    if (!state.priced) { timelineEl.replaceChildren(); return; }
+    const windows = weekWindows(state.priced);
+    const long = windows.length > 1;
+    weekWrap.hidden = !long;
+    if (long && weekEl.options.length !== windows.length) {
+      weekEl.replaceChildren(...windows.map((w, i) => new Option(w.label, String(i))));
+    }
+    const pts = long ? pointsIn(state.priced, windows[+weekEl.value || 0]) : state.priced;
+    timelineEl.replaceChildren(timelineChart(pts, { width: chartEl.clientWidth || 720 }));
+  }
+
+  function renderOffer(m) {
+    const price = parseEuro(offerEl.value);
+    const c = compareOffer(m, price);
+    if (!c) {
+      offerResultEl.innerHTML = '<p>Saisis le prix du kWh indiqué sur ta facture (option base, ou moyenne si heures pleines / heures creuses) pour le comparer au prix de gros.</p>';
+      return;
+    }
+    offerResultEl.innerHTML = `<table>
+      <tr><td>Coût au prix de gros (énergie seule)</td><td>${fmt(c.spotCost, 2)} €</td></tr>
+      <tr><td>Coût avec mon offre (${fmt(m.energyKWh, 1)} kWh × ${fmt(price, 4)} €)</td><td>${fmt(c.offerCost, 2)} €</td></tr>
+      <tr><td>Écart</td><td>${fmt(c.gap, 2)} €</td></tr>
+      <tr><td>Part du prix de gros dans le coût de mon offre</td><td>${fmt(c.spotShare * 100)} %</td></tr>
+    </table>
+    <p>L'écart couvre l'acheminement (TURPE), les taxes, les coûts et la marge du fournisseur : il ne mesure pas une économie possible. Le prix est gardé sur cet appareil.</p>`;
+  }
 
   /** Charge les prix couvrant les mesures (fictifs pour les données d'exemple), puis redessine. */
   async function loadPrices() {
@@ -119,12 +163,20 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
       marketNoteEl.dataset.kind = 'error';
       profileEl.replaceChildren();
       dailyEl.replaceChildren();
+      timelineEl.replaceChildren();
+      capturedEl.replaceChildren();
       return null;
     }
     marketEl.hidden = false;
     marketNoteEl.dataset.kind = '';
     marketNoteEl.textContent = (state.demo ? 'Prix fictifs (données d’exemple).' : 'Prix day-ahead France, source ENTSO-E (pas de 15 min, moyennés sur chaque mesure).') +
       (m.coverage < 0.999 ? ` Prix disponibles pour ${fmt(m.coverage * 100)} % des mesures.` : '');
+    renderTimeline();
+    const nDays = new Set(state.priced.map((p) => isoDay(new Date(p.t.getTime() - 60_000)))).size;
+    const unit = capturedUnit(nDays);
+    capturedUnitEl.textContent = { day: 'par jour', week: 'par semaine', month: 'par mois' }[unit];
+    capturedEl.replaceChildren(capturedChart(capturedBy(state.priced, unit), { width }));
+    renderOffer(m);
     profileEl.replaceChildren(profileChart(
       aggregate(state.priced, { step, metric: 'power', agg: 'mean' }),
       aggregate(state.priced, { step, metric: 'price' }),
@@ -137,8 +189,10 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
   const panel = {
     state,
     status(msg, kind = '') { statusEl.textContent = msg; statusEl.dataset.kind = kind; },
+    syncOffer(value) { if (offerEl.value !== value) offerEl.value = value; if (state.priced) renderOffer(summarizeMarket(state.priced)); },
     setPoints(points, { demo = false } = {}) {
       Object.assign(state, { points, demo, priced: null, priceError: '' });
+      weekEl.replaceChildren();
       panel.render();
       loadPrices();
     },
@@ -176,6 +230,7 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
     if (kind === 'svg') exportSvg(state.chart, `${name}.svg`);
     if (kind === 'csv') exportCsv(toCsv(state.points), `${name}.csv`);
   });
+  panels.push(panel);
   return panel;
 }
 
@@ -217,23 +272,31 @@ apiForm.addEventListener('submit', async (e) => {
     ? { prm, token, cap: +apiForm.cap.value, proxy }
     : { cap: +apiForm.cap.value, proxy });
 
-  const key = `optiwatt.cache|${prm}|${dateDebut}|${dateFin}`;
-  const cached = cache.get(key);
-  if (cached) {
-    apiPanel.setPoints(cached.map((p) => ({ t: new Date(p.t), v: p.v })));
-    apiPanel.status('Données issues du cache de la session (aucun nouvel appel).', 'ok');
-    return;
-  }
-
+  // Courbe de charge limitée à 7 jours par requête : tranches successives (jamais en parallèle,
+  // pour ménager le quota partagé de conso.boris.sh), chacune gardée en cache pendant la session
+  const chunks = splitRange(dateDebut, dateFin, 7);
   const btn = apiForm.querySelector('[type=submit]');
   btn.disabled = true;
-  apiPanel.status('Récupération des données…');
   try {
-    const points = await fetchLoadCurve({ prm, token, dateDebut, dateFin, baseUrl: proxy });
-    cache.set(key, points);
+    const series = [];
+    let calls = 0; let relayHits = 0;
+    for (const [i, c] of chunks.entries()) {
+      const key = `optiwatt.cache|${prm}|${c.dateDebut}|${c.dateFin}`;
+      const cached = cache.get(key);
+      if (cached) { series.push(cached.map((p) => ({ t: new Date(p.t), v: p.v }))); continue; }
+      apiPanel.status(chunks.length > 1 ? `Récupération des données… (tranche ${i + 1} sur ${chunks.length})` : 'Récupération des données…');
+      const pts = await fetchLoadCurve({ prm, token, dateDebut: c.dateDebut, dateFin: c.dateFin, baseUrl: proxy });
+      calls += 1;
+      if (pts.fromRelayCache) relayHits += 1;
+      cache.set(key, pts);
+      series.push(pts);
+    }
+    const points = mergePoints(series);
     apiPanel.setPoints(points);
-    const origin = points.fromRelayCache ? ' — servies par le cache du relais, sans nouvel appel à Enedis' : '';
-    apiPanel.status(`${points.length} mesures reçues (${dateDebut} → ${dateFin})${origin}.`, 'ok');
+    const origin = !calls ? ' — issues du cache de la session, aucun nouvel appel'
+      : relayHits === calls ? ' — servies par le cache du relais, sans nouvel appel à Enedis'
+      : chunks.length > 1 ? ` — ${calls} appel${calls > 1 ? 's' : ''} au relais` : '';
+    apiPanel.status(`${points.length} mesures (${dateDebut} → ${dateFin})${origin}.`, 'ok');
   } catch (err) {
     apiPanel.status(err.message, 'error');
   } finally {

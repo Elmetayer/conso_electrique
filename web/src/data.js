@@ -165,6 +165,27 @@ export function toCsv(points) {
 }
 
 /** Bornes de requête API : [dateFin - n jours, dateFin[ (dateFin exclusive). */
+/**
+ * Découpe [dateDebut, dateFin[ en tranches de `maxDays` jours au plus (limite de 7 jours par requête
+ * de courbe de charge), en partant de la fin. Renvoie les tranches dans l'ordre chronologique.
+ */
+export function splitRange(dateDebut, dateFin, maxDays = 7) {
+  const start = parseTimestamp(`${dateDebut} 00:00`).getTime();
+  const chunks = [];
+  for (let end = parseTimestamp(`${dateFin} 00:00`).getTime(); end > start; end -= maxDays * 86_400_000) {
+    const s = Math.max(start, end - maxDays * 86_400_000);
+    chunks.unshift({ dateDebut: isoDay(new Date(s)), dateFin: isoDay(new Date(end)) });
+  }
+  return chunks;
+}
+
+/** Fusionne plusieurs séries de mesures : tri chronologique, doublons (même horodatage) retirés. */
+export function mergePoints(series) {
+  const byTime = new Map();
+  for (const pts of series) for (const p of pts) byTime.set(p.t.getTime(), p);
+  return [...byTime.values()].sort((a, b) => a.t - b.t);
+}
+
 export function apiRange(endDate, days) {
   const end = parseTimestamp(`${endDate} 00:00`);
   const start = new Date(end.getTime() - days * 86_400_000);

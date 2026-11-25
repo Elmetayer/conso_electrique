@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregate, aggregateHourly, apiRange, parseApiResponse, parseEnedisCsv, parseTimestamp, summarize, toCsv } from './data.js';
+import { aggregate, aggregateHourly, apiRange, mergePoints, parseApiResponse, parseEnedisCsv, parseTimestamp, splitRange, summarize, toCsv } from './data.js';
 
 const CSV = `Identifiant PRM;Type de donnees;Date de debut;Date de fin;Grandeur physique;Grandeur metier;Etape metier;Unite;Pas en minutes
 12345678901234;Courbe de charge;01/04/2026;02/04/2026;Energie active;Consommation;Comptage Brut;W;
@@ -90,5 +90,20 @@ describe('summarize / toCsv / apiRange', () => {
   });
   it('calcule les bornes de requête', () => {
     expect(apiRange('2026-11-22', 7)).toEqual({ dateDebut: '2026-11-15', dateFin: '2026-11-22' });
+  });
+});
+
+describe('splitRange / mergePoints', () => {
+  it('découpe 30 jours en tranches de 7 jours au plus, depuis la fin', () => {
+    const chunks = splitRange('2026-10-26', '2026-11-25');
+    expect(chunks).toHaveLength(5);
+    expect(chunks[0]).toEqual({ dateDebut: '2026-10-26', dateFin: '2026-10-28' });
+    expect(chunks.at(-1)).toEqual({ dateDebut: '2026-11-18', dateFin: '2026-11-25' });
+    expect(splitRange('2026-11-18', '2026-11-25')).toEqual([{ dateDebut: '2026-11-18', dateFin: '2026-11-25' }]);
+  });
+  it('fusionne, trie et dédoublonne', () => {
+    const a = [{ t: parseTimestamp('2026-11-20 01:00'), v: 2 }, { t: parseTimestamp('2026-11-20 00:30'), v: 1 }];
+    const b = [{ t: parseTimestamp('2026-11-20 01:00'), v: 3 }];
+    expect(mergePoints([a, b]).map((p) => p.v)).toEqual([1, 3]);
   });
 });

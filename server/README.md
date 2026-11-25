@@ -10,7 +10,7 @@ python main.py                 # http://localhost:8787
 python -m pytest               # tests
 ```
 
-Variables d'environnement : `ALLOWED_ORIGINS`, `CACHE_HOURS` (12), `CACHE_MAX_ENTRIES` (1000), `RATE_LIMIT` (10/h/IP),
+Variables d'environnement : `ALLOWED_ORIGINS`, `CACHE_HOURS` (12), `CACHE_MAX_ENTRIES` (1000), `RATE_LIMIT` (30/h/IP),
 `ENTSOE_TOKEN` (token API ENTSO-E, active les prix de gros), `MARKET_RATE_LIMIT` (60 mois/h/IP), `PORT` (fourni par Railway).
 
 Déploiement Railway : New Project → Deploy from GitHub repo → `conso_electrique`,

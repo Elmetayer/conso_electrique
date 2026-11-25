@@ -179,6 +179,82 @@ export function dailyCostChart(cost, { width = 720 } = {}) {
   });
 }
 
+
+const MONTHS_SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const WD = WEEKDAYS;
+const fmtWall = (d) => `${WD[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')} ${hhmm(d.getUTCHours() * 60 + d.getUTCMinutes())}`;
+
+/**
+ * Chronologie : puissance moyenne (aire) au-dessus du prix day-ahead (courbe ; prix négatifs en bleu),
+ * sur le même axe de temps. `points` = mesures valorisées (t = fin d'intervalle, v en W, p en €/MWh).
+ */
+export function timelineChart(points, { width = 720 } = {}) {
+  const step = stepMinutesOf(points);
+  const data = points.map((pt) => ({ t: new Date(pt.t.getTime() - step * 30_000), kw: pt.v / 1000, p: pt.p, end: pt.t }));
+  const w = Math.min(width, 960);
+  const x = { type: 'utc', label: null, ticks: 'day', tickFormat: (d) => `${WD[d.getUTCDay()]} ${d.getUTCDate()}`, grid: true };
+  const tipFmt = { x: false, y: false };
+  const tipCh = { Créneau: (d) => `${fmtWall(new Date(d.end.getTime() - step * 60_000))} – ${hhmm(d.end.getUTCHours() * 60 + d.end.getUTCMinutes())}`,
+    Puissance: (d) => `${fmtNum(d.kw, 2)} kW`, Prix: (d) => (d.p == null ? 'non disponible' : `${fmtNum(d.p, 1)} €/MWh`) };
+  const top = Plot.plot({
+    width: w, height: 170, marginLeft: 56, marginBottom: 6,
+    x: { ...x, axis: null },
+    y: { label: 'kW', grid: true, tickFormat: (v) => fmtNum(v, 1) },
+    marks: [
+      Plot.areaY(data, { x: 't', y: 'kw', fill: 'var(--accent)', fillOpacity: 0.2, curve: 'step' }),
+      Plot.lineY(data, { x: 't', y: 'kw', stroke: 'var(--accent)', strokeWidth: 1.2, curve: 'step' }),
+      Plot.ruleY([0]),
+      Plot.tip(data, Plot.pointerX({ x: 't', y: 'kw', channels: tipCh, format: tipFmt })),
+    ],
+  });
+  const priced = data.filter((d) => d.p != null);
+  const bottom = Plot.plot({
+    width: w, height: 170, marginLeft: 56,
+    x,
+    y: { label: '€/MWh', grid: true },
+    marks: [
+      Plot.areaY(priced, { x: 't', y1: 0, y2: (d) => Math.min(0, d.p), fill: '#2563eb', fillOpacity: 0.6, curve: 'step' }),
+      Plot.ruleY([0], { strokeOpacity: 0.5 }),
+      Plot.lineY(data, { x: 't', y: 'p', strokeWidth: 1.2, curve: 'step', defined: (d) => d.p != null }),
+      Plot.tip(priced, Plot.pointerX({ x: 't', y: 'p', channels: tipCh, format: tipFmt })),
+    ],
+  });
+  const div = document.createElement('div');
+  div.className = 'profile';
+  div.append(top, bottom);
+  return div;
+}
+const stepMinutesOf = (points) => (points.length > 1 ? Math.round((points[1].t - points[0].t) / 60_000) || 30 : 30);
+
+/** Libellé d'une ligne de capturedBy(). */
+export function periodLabel({ key, unit }) {
+  const d = new Date(`${unit === 'month' ? `${key}-01` : key}T00:00:00Z`);
+  if (unit === 'month') return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  const dm = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  return unit === 'week' ? `sem. du ${dm}` : `${WD[d.getUTCDay()]} ${dm}`;
+}
+
+/**
+ * Prix capté (point plein : orange si au-dessus du marché, bleu sinon) et prix moyen du marché
+ * (point creux), une ligne par jour, semaine ou mois. `rows` = capturedBy().
+ */
+export function capturedChart(rows, { width = 720 } = {}) {
+  const data = rows.map((r) => ({ ...r, label: periodLabel(r), dear: r.captured > r.market }));
+  const color = (d) => (d.dear ? 'var(--accent)' : '#2563eb');
+  const ch = { Période: 'label', 'Prix capté': (d) => `${fmtNum(d.captured, 1)} €/MWh`, 'Prix moyen du marché': (d) => `${fmtNum(d.market, 1)} €/MWh`,
+    Énergie: (d) => `${fmtNum(d.energyKWh, 1)} kWh`, Coût: (d) => `${fmtNum(d.cost, 2)} €` };
+  return Plot.plot({
+    width: Math.min(width, 640), height: 40 + data.length * 22, marginLeft: 92,
+    x: { label: '€/MWh', grid: true },
+    y: { domain: data.map((d) => d.label), label: null, tickSize: 0 },
+    marks: [
+      Plot.link(data, { x1: 'market', x2: 'captured', y1: 'label', y2: 'label', stroke: color, strokeWidth: 3, strokeOpacity: 0.45 }),
+      Plot.dot(data, { x: 'market', y: 'label', r: 4.5, fill: 'var(--surface, #fff)', stroke: 'currentColor', strokeWidth: 1.5 }),
+      Plot.dot(data, { x: 'captured', y: 'label', r: 4.5, fill: color, channels: ch, tip: { format: { x: false, y: false, fill: false } } }),
+    ],
+  });
+}
+
 /** Message affiché à la place d'un graphique. */
 export function placeholder(message) {
   const div = document.createElement('div');
