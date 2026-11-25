@@ -3,7 +3,7 @@ import { aggregate, apiRange, isoDay, mergePoints, parseEnedisCsv, splitRange, s
 import { fetchLoadCurve } from './api.js';
 import { capturedChart, dailyCostChart, exportCsv, exportPng, exportSvg, longHeatmap, monthHeatmap, placeholder, profileChart, timelineChart } from './charts.js';
 import { demoPoints } from './demo.js';
-import { attachPrices, capturedBy, capturedUnit, compareOffer, demoPrices, fetchDayAhead, parseEuro, pointsIn, priceRange, summarizeMarket, weekWindows } from './prices.js';
+import { attachPrices, capturedBy, capturedUnit, compareOffer, demoLoads, demoPrices, fetchDayAhead, parseEuro, pointsIn, priceRange, summarizeMarket, weekWindows } from './prices.js';
 
 const CAP_OPTIONS = [3, 6, 9, 12, 15, 18, 24, 30, 36];
 const STORE_KEY = 'optiwatt.settings';
@@ -60,8 +60,10 @@ function renderKpis(el, s, m) {
   if (m) {
     tiles.push(
       ['Valorisation au prix de gros', `${fmt(m.cost, 2)} €`, 'Σ énergie × prix day-ahead (hors réseau et taxes)'],
-      ['Prix capté', `${fmt(m.captured)} €/MWh`, `prix moyen du marché : ${fmt(m.market)} €/MWh`],
-      ['Facteur de forme', `× ${fmt(m.shape, 2)}`, m.shape > 1 ? 'tu consommes plutôt quand c’est cher' : 'tu consommes plutôt quand c’est bon marché'],
+      ['Ton prix capté', `${fmt(m.captured)} €/MWh`, 'prix moyen pondéré par ta consommation'],
+      [m.marketKind === 'france' ? 'Prix capté par la conso France' : 'Prix moyen du marché', `${fmt(m.market)} €/MWh`,
+        m.marketKind === 'france' ? 'même calcul, pondéré par la consommation nationale' : 'moyenne simple (conso France indisponible)'],
+      ['Facteur de forme', `× ${fmt(m.shape, 2)}`, m.shape > 1 ? 'ton profil coûte plus cher que le profil moyen français' : 'ton profil coûte moins cher que le profil moyen français'],
     );
   }
   el.replaceChildren(...tiles.map(([label, value, sub]) => {
@@ -133,21 +135,21 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
   async function loadPrices() {
     const id = ++state.loadId;
     const points = state.points;
-    let prices;
+    let market;
     try {
-      if (state.demo) prices = demoPrices(points);
+      if (state.demo) { const prices = demoPrices(points); market = { prices, loads: demoLoads(prices) }; }
       else {
         const { debut, fin } = priceRange(points);
-        const key = `optiwatt.prix|${debut}|${fin}`;
+        const key = `optiwatt.prix2|${debut}|${fin}`; // prix + conso France
         const cached = cache.get(key);
-        if (cached) prices = new Map(cached);
+        if (cached) market = { prices: new Map(cached.p), loads: new Map(cached.l) };
         else {
-          prices = await fetchDayAhead({ baseUrl: relayUrl(), debut, fin });
-          cache.set(key, [...prices]);
+          market = await fetchDayAhead({ baseUrl: relayUrl(), debut, fin });
+          cache.set(key, { p: [...market.prices], l: [...market.loads] });
         }
       }
       if (id !== state.loadId) return;
-      state.priced = attachPrices(points, prices);
+      state.priced = attachPrices(points, market.prices, market.loads);
     } catch (err) {
       if (id !== state.loadId) return;
       state.priceError = err.message;
@@ -169,7 +171,9 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
     }
     marketEl.hidden = false;
     marketNoteEl.dataset.kind = '';
-    marketNoteEl.textContent = (state.demo ? 'Prix fictifs (données d’exemple).' : 'Prix day-ahead France, source ENTSO-E (pas de 15 min, moyennés sur chaque mesure).') +
+    marketNoteEl.textContent = (state.demo ? 'Prix et consommation France fictifs (données d’exemple).'
+      : 'Prix day-ahead et consommation France réalisée, source ENTSO-E (pas de 15 min, ramenés à chaque mesure).') +
+      (m.marketKind === 'simple' ? ' Consommation France indisponible sur une partie de la période : prix de marché en moyenne simple.' : '') +
       (m.coverage < 0.999 ? ` Prix disponibles pour ${fmt(m.coverage * 100)} % des mesures.` : '');
     renderTimeline();
     const nDays = new Set(state.priced.map((p) => isoDay(new Date(p.t.getTime() - 60_000)))).size;

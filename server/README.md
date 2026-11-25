@@ -2,7 +2,8 @@
 
 Relaie `GET /api/<type>` vers conso.boris.sh avec CORS, cache (12 h) et limite par IP.
 Sert aussi `GET /api/prix_day_ahead?debut=AAAA-MM-JJ&fin=AAAA-MM-JJ` : prix day-ahead France
-au pas de 15 min, lus sur ENTSO-E (`marche.py`) et mis en cache par mois.
+et consommation France réalisée (pour pondérer le prix moyen du marché),
+au pas de 15 min, lues sur ENTSO-E (`marche.py`) et mises en cache par mois.
 Bibliothèque standard uniquement.
 
 ```bash

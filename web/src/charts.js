@@ -235,13 +235,14 @@ export function periodLabel({ key, unit }) {
 }
 
 /**
- * Prix capté (point plein : orange si au-dessus du marché, bleu sinon) et prix moyen du marché
- * (point creux), une ligne par jour, semaine ou mois. `rows` = capturedBy().
+ * Ton prix capté (point plein : orange si plus cher que la France, bleu sinon) et prix capté par la
+ * consommation France (point creux), une ligne par jour, semaine ou mois. `rows` = capturedBy().
  */
 export function capturedChart(rows, { width = 720 } = {}) {
   const data = rows.map((r) => ({ ...r, label: periodLabel(r), dear: r.captured > r.market }));
   const color = (d) => (d.dear ? 'var(--accent)' : '#2563eb');
-  const ch = { Période: 'label', 'Prix capté': (d) => `${fmtNum(d.captured, 1)} €/MWh`, 'Prix moyen du marché': (d) => `${fmtNum(d.market, 1)} €/MWh`,
+  const ch = { Période: 'label', 'Ton prix capté': (d) => `${fmtNum(d.captured, 1)} €/MWh`,
+    [rows[0]?.marketKind === 'simple' ? 'Prix moyen du marché (simple)' : 'Prix capté par la conso France']: (d) => `${fmtNum(d.market, 1)} €/MWh`,
     Énergie: (d) => `${fmtNum(d.energyKWh, 1)} kWh`, Coût: (d) => `${fmtNum(d.cost, 2)} €` };
   return Plot.plot({
     width: Math.min(width, 640), height: 40 + data.length * 22, marginLeft: 92,

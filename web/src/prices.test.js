@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aggregate, parseTimestamp } from './data.js';
-import { attachPrices, capturedBy, capturedUnit, compareOffer, demoPrices, parseEuro, parsePriceResponse, pointsIn, priceRange, summarizeMarket, weekWindows } from './prices.js';
+import { attachPrices, capturedBy, capturedUnit, compareOffer, demoLoads, demoPrices, parseEuro, parsePriceResponse, pointsIn, priceRange, summarizeMarket, weekWindows } from './prices.js';
 
 const T = (s) => parseTimestamp(s);
 const ms = (s) => T(s).getTime();
@@ -10,15 +10,17 @@ const RESPONSE = { points: [['2026-11-20T00:00', 40], ['2026-11-20T00:15', 60], 
 
 describe('parsePriceResponse', () => {
   it('indexe par début de quart d’heure et moyenne les doublons', () => {
-    const m = parsePriceResponse({ points: [...RESPONSE.points, ['2026-11-20T00:00', 50]] });
+    const { prices: m, loads } = parsePriceResponse({ points: [...RESPONSE.points, ['2026-11-20T00:00', 50, 60000]] });
     expect(m.get(ms('2026-11-20 00:00'))).toBe(45);
     expect(m.size).toBe(4);
+    expect(loads.get(ms('2026-11-20 00:00'))).toBe(60000);
+    expect(loads.size).toBe(1);
   });
 });
 
 describe('attachPrices', () => {
   it('associe à une mesure Linky (fin d’intervalle) la moyenne des quarts d’heure couverts', () => {
-    const prices = parsePriceResponse(RESPONSE);
+    const { prices } = parsePriceResponse(RESPONSE);
     const pts = attachPrices([
       { t: T('2026-11-20 00:30'), v: 1000 },
       { t: T('2026-11-20 01:00'), v: 2000 },
@@ -32,7 +34,7 @@ describe('summarizeMarket et agrégation', () => {
   const pts = attachPrices([
     { t: T('2026-11-20 00:30'), v: 1000 }, // 0,5 kWh à 50 €/MWh = 0,025 €
     { t: T('2026-11-20 01:00'), v: 3000 }, // 1,5 kWh à 40 €/MWh = 0,06 €
-  ], parsePriceResponse(RESPONSE));
+  ], parsePriceResponse(RESPONSE).prices);
 
   it('calcule coût, prix capté et facteur de forme', () => {
     const s = summarizeMarket(pts);
@@ -98,5 +100,34 @@ describe('maquette A', () => {
     expect(c.offerCost).toBeCloseTo(20);
     expect(c.gap).toBeCloseTo(12);
     expect(c.spotShare).toBeCloseTo(0.4);
+  });
+});
+
+describe('prix de marché pondéré par la consommation France', () => {
+  // Quart d'heure à 40 €/MWh avec 30 GW, puis 3 quarts d'heure à 100 €/MWh avec 60 GW
+  const json = { points: [['2026-11-20T00:00', 40, 30000], ['2026-11-20T00:15', 100, 60000], ['2026-11-20T00:30', 100, 60000], ['2026-11-20T00:45', 100, 60000]] };
+  const { prices, loads } = parsePriceResponse(json);
+  const pts = attachPrices([{ t: T('2026-11-20 00:30'), v: 2000 }, { t: T('2026-11-20 01:00'), v: 1000 }], prices, loads);
+
+  it('même calcul que le prix capté : moyenne des prix pondérée par le volume', () => {
+    // France : (40×30 + 100×60 + 100×60 + 100×60) / (30+60+60+60) = 91,43 €/MWh
+    const s = summarizeMarket(pts);
+    expect(s.marketKind).toBe('france');
+    expect(s.market).toBeCloseTo(19200 / 210, 2);
+    // toi : 1 kWh à 70 €/MWh (moyenne simple des 2 quarts d'heure), 0,5 kWh à 100 €/MWh
+    expect(s.captured).toBeCloseTo((1 * 70 + 0.5 * 100) / 1.5, 6);
+    expect(s.shape).toBeCloseTo(s.captured / s.market);
+  });
+
+  it('repli sur la moyenne simple si la conso France manque', () => {
+    const partial = attachPrices([{ t: T('2026-11-20 00:30'), v: 2000 }], prices, new Map());
+    const s = summarizeMarket(partial);
+    expect(s.marketKind).toBe('simple');
+    expect(s.market).toBeCloseTo(70);
+  });
+
+  it('conso France fictive pour les données d’exemple', () => {
+    const l = demoLoads(new Map([[ms('2026-01-15 19:30'), 100], [ms('2026-07-15 04:00'), 50]]));
+    expect(l.get(ms('2026-01-15 19:30'))).toBeGreaterThan(l.get(ms('2026-07-15 04:00')));
   });
 });
