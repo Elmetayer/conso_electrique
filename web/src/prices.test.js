@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aggregate, parseTimestamp } from './data.js';
-import { attachPrices, demoPrices, parsePriceResponse, priceRange, summarizeMarket } from './prices.js';
+import { attachPrices, capturedBy, capturedUnit, compareOffer, demoPrices, parseEuro, parsePriceResponse, pointsIn, priceRange, summarizeMarket, weekWindows } from './prices.js';
 
 const T = (s) => parseTimestamp(s);
 const ms = (s) => T(s).getTime();
@@ -65,5 +65,38 @@ describe('priceRange et demoPrices', () => {
     const a = demoPrices(pts);
     expect(a.size).toBe(96);
     expect([...a.values()]).toEqual([...demoPrices(pts).values()]);
+  });
+});
+
+describe('maquette A', () => {
+  // 10 jours, 2 mesures par jour (00:30 et 01:00), 1 kW, prix 40 puis 60 €/MWh
+  const pts = [];
+  for (let d = 10; d < 20; d++) {
+    pts.push({ t: T(`2026-11-${d} 00:30`), v: 1000, p: 40 }, { t: T(`2026-11-${d} 01:00`), v: 1000, p: d === 19 ? 160 : 60 });
+  }
+  it('fenêtres de 7 jours depuis la fin', () => {
+    const w = weekWindows(pts);
+    expect(w.map((x) => [x.from, x.last])).toEqual([['2026-11-13', '2026-11-19'], ['2026-11-10', '2026-11-12']]);
+    expect(w[0].label).toBe('Du 13/11 au 19/11');
+    expect(pointsIn(pts, w[1])).toHaveLength(6);
+  });
+  it('prix capté par jour et par semaine', () => {
+    const days = capturedBy(pts, 'day');
+    expect(days).toHaveLength(10);
+    expect(days[0]).toMatchObject({ key: '2026-11-10', captured: 50, market: 50 });
+    expect(days[9].captured).toBeCloseTo(100);
+    const weeks = capturedBy(pts, 'week');
+    expect(weeks.map((w) => w.key)).toEqual(['2026-11-09', '2026-11-16']);
+    expect(capturedUnit(7)).toBe('day');
+    expect(capturedUnit(60)).toBe('week');
+    expect(capturedUnit(365)).toBe('month');
+  });
+  it('comparaison avec son offre', () => {
+    expect(parseEuro('0,2')).toBe(0.2);
+    expect(parseEuro('abc')).toBeNull();
+    const c = compareOffer({ energyKWh: 100, cost: 8 }, 0.2);
+    expect(c.offerCost).toBeCloseTo(20);
+    expect(c.gap).toBeCloseTo(12);
+    expect(c.spotShare).toBeCloseTo(0.4);
   });
 });

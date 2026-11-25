@@ -115,3 +115,13 @@ select:disabled { opacity: 0.55; cursor: not-allowed; }
 .market-note { font-size: 0.85rem; color: var(--muted); margin: 0; }
 .market-note[data-kind='error'] { color: var(--error); }
 .profile { display: flex; flex-direction: column; }
+.market-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+label.inline { flex-direction: row; align-items: center; gap: 0.5rem; font-weight: 400; font-size: 0.85rem; color: var(--muted); }
+label.inline select { width: auto; }
+.offer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 1rem; align-items: start; }
+@media (max-width: 640px) { .offer { grid-template-columns: 1fr; } }
+.offer-result table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.offer-result td { padding: 0.35rem 0; border-top: 1px solid var(--line); }
+.offer-result tr:first-child td { border-top: none; }
+.offer-result td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.offer-result p { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--muted); }

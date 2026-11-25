@@ -43,7 +43,7 @@ ALLOWED_ORIGINS = {o.strip() for o in os.environ.get(
 USER_AGENT = os.environ.get("USER_AGENT", "OptiWatt-relay/0.1 (+https://github.com/Elmetayer/conso_electrique)")
 CACHE_HOURS = float(os.environ.get("CACHE_HOURS", "12"))
 CACHE_MAX_ENTRIES = int(os.environ.get("CACHE_MAX_ENTRIES", "1000"))  # ~15 Ko/entrée -> ~15 Mo
-RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "10"))
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "30"))
 TYPES = {
     "index_consommation", "index_production", "consommation_quotidienne", "production_quotidienne",
     "puissance_conso_max_quotidienne", "courbe_de_charge_consommation", "courbe_de_charge_production",

@@ -107,3 +107,65 @@ export async function fetchDayAhead({ baseUrl, debut, fin }) {
   if (!prices.size) throw new Error('Prix de marché : aucune donnée ENTSO-E sur cette période.');
   return prices;
 }
+
+// ---------- Maquette A : chronologie, prix capté par période, comparaison avec son offre ----------
+
+const dayOf = (pt) => isoDay(new Date(pt.t.getTime() - 60_000)); // jour du début d'intervalle
+
+/** Fenêtres de 7 jours (la plus récente d'abord), pour la chronologie sur une longue période. */
+export function weekWindows(points) {
+  const days = [...new Set(points.map(dayOf))].sort();
+  const out = [];
+  for (let end = days.length; end > 0; end -= 7) {
+    const from = days[Math.max(0, end - 7)]; const last = days[end - 1];
+    out.push({ from, last, label: `Du ${from.slice(8, 10)}/${from.slice(5, 7)} au ${last.slice(8, 10)}/${last.slice(5, 7)}` });
+  }
+  return out;
+}
+
+/** Mesures d'une fenêtre [from, last] (jours inclus). */
+export const pointsIn = (points, { from, last }) => points.filter((p) => { const d = dayOf(p); return d >= from && d <= last; });
+
+/** Unité de regroupement du prix capté selon la longueur de la période. */
+export const capturedUnit = (nDays) => (nDays <= 31 ? 'day' : nDays <= 120 ? 'week' : 'month');
+
+function groupKey(day, unit) {
+  if (unit === 'month') return day.slice(0, 7);
+  if (unit === 'week') {
+    const d = new Date(`${day}T00:00:00Z`);
+    return isoDay(new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * 86_400_000)); // lundi
+  }
+  return day;
+}
+
+/** Prix capté et prix moyen du marché par jour, semaine (clé = lundi) ou mois. */
+export function capturedBy(points, unit = 'day') {
+  const step = stepMinutes(points);
+  const acc = new Map();
+  for (const pt of points) {
+    if (pt.p == null) continue;
+    const key = groupKey(dayOf(pt), unit);
+    const a = acc.get(key) ?? { mwh: 0, cost: 0, psum: 0, n: 0 };
+    const e = (pt.v * (step / 60)) / 1e6;
+    a.mwh += e; a.cost += e * pt.p; a.psum += pt.p; a.n += 1;
+    acc.set(key, a);
+  }
+  return [...acc].sort(([a], [b]) => (a < b ? -1 : 1)).filter(([, a]) => a.mwh > 0)
+    .map(([key, a]) => ({ key, unit, captured: a.cost / a.mwh, market: a.psum / a.n, energyKWh: a.mwh * 1000, cost: a.cost }));
+}
+
+/** "0,1952" ou "0.1952" -> 0.1952 ; null si vide ou invalide. */
+export function parseEuro(text) {
+  const v = Number(String(text ?? '').trim().replace(',', '.'));
+  return text && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/**
+ * Compare la valorisation au prix de gros avec le coût au prix du kWh de son offre.
+ * L'écart couvre l'acheminement (TURPE), les taxes, la marge et les coûts du fournisseur.
+ */
+export function compareOffer(summary, priceEurKWh) {
+  if (!summary || !priceEurKWh) return null;
+  const offerCost = summary.energyKWh * priceEurKWh;
+  return { offerCost, spotCost: summary.cost, gap: offerCost - summary.cost, spotShare: summary.cost / offerCost };
+}

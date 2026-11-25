@@ -58,7 +58,7 @@
           </select>
         </label>
         <label>Nombre de jours : <output name="daysOut">7</output>
-          <input name="days" type="range" min="1" max="7" value="7" />
+          <input name="days" type="range" min="1" max="30" value="7" />
         </label>
         <label>Jusqu'au (exclu)
           <input name="end" type="date" required />
@@ -81,6 +81,21 @@
         <div class="chart" data-chart></div>
         <div class="market" data-market hidden>
           <p class="market-note" data-market-note></p>
+          <div class="market-head">
+            <h3>Ta consommation face au prix</h3>
+            <label class="inline" data-week-wrap hidden>Semaine affichée <select data-week></select></label>
+          </div>
+          <div class="chart" data-timeline></div>
+          <h3>Prix capté et prix moyen du marché, <span data-captured-unit>par jour</span></h3>
+          <p class="market-note">Point plein : prix moyen de ton kWh, pondéré par ta consommation (orange s'il dépasse le marché, bleu sinon). Point creux : prix moyen du marché.</p>
+          <div class="chart" data-captured></div>
+          <h3>Comparer à mon offre</h3>
+          <div class="offer">
+            <label>Prix du kWh de mon offre (€/kWh TTC)
+              <input data-offer inputmode="decimal" autocomplete="off" placeholder="€/kWh, voir ta facture" />
+            </label>
+            <div class="offer-result" data-offer-result></div>
+          </div>
           <h3>Profil journalier moyen</h3>
           <div class="chart" data-profile></div>
           <h3>Coût au prix de gros, par jour</h3>
@@ -93,7 +108,7 @@
         </div>
       </div>
       <aside class="card note">
-        <strong>Bon usage de l'API</strong> — Enedis ne met à jour les données qu'une fois par jour et le quota est partagé par tous les utilisateurs de conso.boris.sh. Une requête par jour suffit : les résultats sont gardés en cache (12 h sur le relais, et pendant la session dans votre navigateur). La courbe de charge est limitée à 7 jours par appel.
+        <strong>Bon usage de l'API</strong> — Enedis ne met à jour les données qu'une fois par jour et le quota est partagé par tous les utilisateurs de conso.boris.sh. Une requête par jour suffit : les résultats sont gardés en cache (12 h sur le relais, et pendant la session dans votre navigateur). La courbe de charge est limitée à 7 jours par appel : au-delà, l'application enchaîne plusieurs appels (5 pour 30 jours).
       </aside>
     </section>
 
@@ -141,6 +156,21 @@
         <div class="chart" data-chart></div>
         <div class="market" data-market hidden>
           <p class="market-note" data-market-note></p>
+          <div class="market-head">
+            <h3>Ta consommation face au prix</h3>
+            <label class="inline" data-week-wrap hidden>Semaine affichée <select data-week></select></label>
+          </div>
+          <div class="chart" data-timeline></div>
+          <h3>Prix capté et prix moyen du marché, <span data-captured-unit>par jour</span></h3>
+          <p class="market-note">Point plein : prix moyen de ton kWh, pondéré par ta consommation (orange s'il dépasse le marché, bleu sinon). Point creux : prix moyen du marché.</p>
+          <div class="chart" data-captured></div>
+          <h3>Comparer à mon offre</h3>
+          <div class="offer">
+            <label>Prix du kWh de mon offre (€/kWh TTC)
+              <input data-offer inputmode="decimal" autocomplete="off" placeholder="€/kWh, voir ta facture" />
+            </label>
+            <div class="offer-result" data-offer-result></div>
+          </div>
           <h3>Profil journalier moyen</h3>
           <div class="chart" data-profile></div>
           <h3>Coût au prix de gros, par jour</h3>
