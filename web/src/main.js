@@ -7,6 +7,7 @@ import { attachPrices, capturedBy, capturedUnit, compareOffer, demoLoads, demoPr
 
 const CAP_OPTIONS = [3, 6, 9, 12, 15, 18, 24, 30, 36];
 const STORE_KEY = 'optiwatt.settings';
+const BLOCKS_KEY = 'optiwatt.blocs'; // blocs repliés ou dépliés (heatmap, prix…), gardés sur l'appareil
 const OFFER_KEY = 'optiwatt.offre'; // prix du kWh de l'offre, pour la comparaison au prix de gros
 const panels = [];
 const ENV_PROXY = import.meta.env.VITE_PROXY_URL ?? '';
@@ -83,6 +84,31 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
   const chartEl = panelEl.querySelector('[data-chart]');
   const kpisEl = panelEl.querySelector('[data-kpis]');
   const exportsEl = panelEl.querySelector('[data-exports]');
+
+  // Blocs repliables (<details data-block>) et bouton « Tout replier / Tout déplier »
+  const blocksBar = panelEl.querySelector('[data-blocks-bar]');
+  const toggleAllBtn = panelEl.querySelector('[data-toggle-all]');
+  const blocks = [...panelEl.querySelectorAll('details[data-block]')];
+  const savedBlocks = store.get(BLOCKS_KEY, {});
+  for (const b of blocks) {
+    if (b.dataset.block in savedBlocks) b.open = savedBlocks[b.dataset.block];
+    b.addEventListener('toggle', () => {
+      store.set(BLOCKS_KEY, { ...store.get(BLOCKS_KEY, {}), [b.dataset.block]: b.open });
+      syncToggleAll();
+      // Un bloc replié au moment du rendu a des graphiques à la largeur par défaut : on redessine à l'ouverture
+      if (b.open && state.points) panel.render();
+    });
+  }
+  const visibleBlocks = () => blocks.filter((b) => !b.hidden);
+  function syncToggleAll() {
+    const anyOpen = visibleBlocks().some((b) => b.open);
+    toggleAllBtn.textContent = anyOpen ? 'Tout replier' : 'Tout déplier';
+    toggleAllBtn.setAttribute('aria-expanded', String(anyOpen));
+  }
+  toggleAllBtn.addEventListener('click', () => {
+    const open = !visibleBlocks().some((b) => b.open);
+    for (const b of visibleBlocks()) b.open = open;
+  });
   const statusEl = panelEl.querySelector('[data-status]');
   const marketEl = panelEl.querySelector('[data-market]');
   const marketNoteEl = panelEl.querySelector('[data-market-note]');
@@ -214,6 +240,8 @@ function makePanel(panelEl, { getOptions, filePrefix, aggEl, capEl }) {
       const width = chartEl.clientWidth || 720;
       const market = renderMarket(step, width);
       renderKpis(kpisEl, summarize(state.points), market);
+      blocksBar.hidden = false;
+      syncToggleAll();
       if (!power && !state.priced) {
         state.chart = null;
         exportsEl.hidden = true;
