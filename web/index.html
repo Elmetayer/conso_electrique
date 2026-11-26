@@ -78,8 +78,20 @@
       </form>
       <div class="card result">
         <div class="kpis" data-kpis></div>
-        <div class="chart" data-chart></div>
-        <div class="market" data-market hidden>
+        <div class="blocks-bar" data-blocks-bar hidden>
+          <button type="button" class="ghost small" data-toggle-all aria-expanded="true">Tout replier</button>
+        </div>
+        <details class="block" data-block="heatmap" open>
+          <summary><h3>Carte de chaleur</h3></summary>
+          <div class="chart" data-chart></div>
+          <div class="exports" data-exports hidden>
+            <button type="button" data-export="png">PNG</button>
+            <button type="button" data-export="svg">SVG</button>
+            <button type="button" data-export="csv">Données CSV</button>
+          </div>
+        </details>
+        <details class="block market" data-block="prix" data-market open hidden>
+          <summary><h3>Prix de gros</h3></summary>
           <p class="market-note" data-market-note></p>
           <div class="market-head">
             <h3>Ta consommation face au prix</h3>
@@ -100,12 +112,7 @@
           <div class="chart" data-profile></div>
           <h3>Coût au prix de gros, par jour</h3>
           <div class="chart" data-daily></div>
-        </div>
-        <div class="exports" data-exports hidden>
-          <button type="button" data-export="png">PNG</button>
-          <button type="button" data-export="svg">SVG</button>
-          <button type="button" data-export="csv">Données CSV</button>
-        </div>
+        </details>
       </div>
       <aside class="card note">
         <strong>Bon usage de l'API</strong> — Enedis ne met à jour les données qu'une fois par jour et le quota est partagé par tous les utilisateurs de conso.boris.sh. Une requête par jour suffit : les résultats sont gardés en cache (12 h sur le relais, et pendant la session dans votre navigateur). La courbe de charge est limitée à 7 jours par appel : au-delà, l'application enchaîne plusieurs appels (5 pour 30 jours).
@@ -153,8 +160,20 @@
       </form>
       <div class="card result">
         <div class="kpis" data-kpis></div>
-        <div class="chart" data-chart></div>
-        <div class="market" data-market hidden>
+        <div class="blocks-bar" data-blocks-bar hidden>
+          <button type="button" class="ghost small" data-toggle-all aria-expanded="true">Tout replier</button>
+        </div>
+        <details class="block" data-block="heatmap" open>
+          <summary><h3>Carte de chaleur</h3></summary>
+          <div class="chart" data-chart></div>
+          <div class="exports" data-exports hidden>
+            <button type="button" data-export="png">PNG</button>
+            <button type="button" data-export="svg">SVG</button>
+            <button type="button" data-export="csv">Données CSV</button>
+          </div>
+        </details>
+        <details class="block market" data-block="prix" data-market open hidden>
+          <summary><h3>Prix de gros</h3></summary>
           <p class="market-note" data-market-note></p>
           <div class="market-head">
             <h3>Ta consommation face au prix</h3>
@@ -175,12 +194,7 @@
           <div class="chart" data-profile></div>
           <h3>Coût au prix de gros, par jour</h3>
           <div class="chart" data-daily></div>
-        </div>
-        <div class="exports" data-exports hidden>
-          <button type="button" data-export="png">PNG</button>
-          <button type="button" data-export="svg">SVG</button>
-          <button type="button" data-export="csv">Données CSV</button>
-        </div>
+        </details>
       </div>
     </section>
   </main>
